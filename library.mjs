@@ -137,3 +137,44 @@ export function nextEpisode(episodes) {
     (view.season === best.season && view.episode > best.episode) ? view : best, null)
   return latest ? { season: latest.season, episode: latest.episode + 1 } : { season: 1, episode: 1 }
 }
+
+const titleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+export const librarySorts = ['added', 'newest', 'title', 'title-desc', 'year', 'watched', 'status']
+
+function latestViewing(title) {
+  return title.history.reduce((latest, view) => view.finished && view.finished > latest ? view.finished : latest, '')
+}
+
+export function sortTitles(titles, sort) {
+  const byTitle = (a, b) => titleCollator.compare(a.title, b.title)
+  const byOrder = (a, b) => (a.order ?? '').localeCompare(b.order ?? '')
+  const comparators = {
+    added: byOrder, newest: (a, b) => byOrder(b, a),
+    title: byTitle, 'title-desc': (a, b) => byTitle(b, a),
+    year: (a, b) => (Number(a.year) || 9999) - (Number(b.year) || 9999),
+    watched: (a, b) => latestViewing(b).localeCompare(latestViewing(a)),
+    status: (a, b) => statuses.indexOf(status(a)) - statuses.indexOf(status(b)),
+  }
+  const compare = Object.hasOwn(comparators, sort) ? comparators[sort] : byOrder
+  return [...titles].sort((a, b) => compare(a, b) || byTitle(a, b))
+}
+
+export function viewingInsights(titles, now = new Date()) {
+  const counts = Object.fromEntries(statuses.map(label => [label, 0]))
+  const months = Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - 11 + index, 1)
+    const key = String(date.getFullYear()) + '-' + String(date.getMonth() + 1).padStart(2, '0')
+    return { date, key, count: 0 }
+  })
+  const byMonth = new Map(months.map(month => [month.key, month]))
+  let undated = 0
+  for (const title of titles) {
+    counts[status(title)]++
+    for (const view of title.history) {
+      if (!view.finished) { undated++; continue }
+      const month = byMonth.get(view.finished.slice(0, 7))
+      if (month) month.count++
+    }
+  }
+  return { counts, months, undated }
+}

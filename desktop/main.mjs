@@ -1,7 +1,8 @@
+import { createUpdateController, RELEASES_URL } from './updates.mjs'
 import { createGoogleAccount } from './google-account.mjs'
-import { app, BrowserWindow, Menu, protocol, safeStorage, session, shell } from 'electron'
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { app, BrowserWindow, dialog, Menu, protocol, safeStorage, session, shell } from 'electron'
+import { existsSync, mkdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { serveApp } from '../app-response.mjs'
 
 const scheme = 'quiet-screen'
@@ -18,7 +19,7 @@ let window
 
 function openExternalLink(value) {
   const url = new URL(value)
-  if (!url.username && !url.password && (url.origin === 'https://www.imdb.com' || url.href === 'https://www.apache.org/licenses/LICENSE-2.0')) {
+  if (!url.username && !url.password && (url.origin === 'https://www.imdb.com' || url.href === 'https://www.apache.org/licenses/LICENSE-2.0' || url.href === RELEASES_URL)) {
     void shell.openExternal(url.href).catch(console.error)
   }
 }
@@ -59,7 +60,21 @@ if (!app.requestSingleInstanceLock()) {
       defaultClientId: app.isPackaged ? '' : process.env.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID,
       defaultClientSecret: app.isPackaged ? '' : process.env.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_SECRET,
     })
-    app.on('before-quit', account.dispose)
+    const updates = createUpdateController({
+      app, dialog, getWindow: () => window, enabled: app.isPackaged && process.platform === 'win32' &&
+        existsSync(join(dirname(process.execPath), 'quiet-screen.install')),
+      network: account.network,
+    })
+    const startupCheck = setTimeout(() => void updates.check(), 15_000)
+    const dailyCheck = setInterval(() => void updates.check(), 86_400_000)
+    startupCheck.unref()
+    dailyCheck.unref()
+    app.on('before-quit', () => {
+      clearTimeout(startupCheck)
+      clearInterval(dailyCheck)
+      account.dispose()
+      updates.dispose()
+    })
     protocol.handle(scheme, async request => {
       const url = new URL(request.url)
       if (url.host !== 'app' || url.username || url.password) return new Response(null, { status: 403 })
@@ -72,6 +87,31 @@ if (!app.requestSingleInstanceLock()) {
         const response = await account.handle(request)
         response.headers.set('Cache-Control', 'no-store')
         return response
+      }
+      if (url.pathname === '/api/update-status' && request.method === 'GET') {
+        await updates.ready
+        return Response.json(updates.getStatus(), { headers: { 'Cache-Control': 'no-store' } })
+      }
+      if (url.pathname === '/api/update-action') {
+        const origin = request.headers.get('Origin')
+        if (request.method !== 'POST' || (origin && origin !== appURL.slice(0, -1) && origin !== 'null') ||
+            request.headers.get('X-Quiet-Screen-Update') !== '1') return new Response(null, { status: 403 })
+        const action = url.searchParams.get('action')
+        if (action === 'configure') {
+          try {
+            const body = await request.text()
+            if (body.length > 2048) return new Response(null, { status: 413 })
+            return Response.json(await updates.configure(JSON.parse(body)))
+          } catch {
+            return new Response(null, { status: 400 })
+          }
+        }
+        if (!updates.getStatus().enabled) return new Response(null, { status: 403 })
+        if (action === 'check') void updates.check({ manual: true })
+        else if (action === 'download' && updates.getStatus().phase === 'available') void updates.download()
+        else if (action === 'install' && updates.getStatus().phase === 'ready') void updates.install()
+        else return new Response(null, { status: 409 })
+        return Response.json(updates.getStatus(), { status: 202 })
       }
       return serveApp(url, request.method)
     })
@@ -92,6 +132,7 @@ if (!app.requestSingleInstanceLock()) {
       { label: 'File', submenu: [{ role: 'quit' }] },
       { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
       { label: 'View', submenu: [{ role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'togglefullscreen' }] },
+      { label: 'Help', submenu: [{ label: 'Check for updates…', enabled: updates.getStatus().enabled, click: () => void updates.check({ manual: true }) }] },
     ]))
     return createWindow()
   }).catch(error => {

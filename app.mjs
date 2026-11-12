@@ -1,5 +1,5 @@
 import './sync/sync-core.js'
-import { isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
+import { librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
 
 const $ = id => document.getElementById(id)
 const titleForm = $('title-form')
@@ -10,6 +10,20 @@ const storageKey = 'quiet-screen-v1'
 const listsKey = 'quiet-screen-lists-v1'
 let lists = []
 let listSelection = null
+let detailTab = 'overview'
+const libraryViewKey = 'quiet-screen-library-view-v1'
+const libraryView = { sort: 'added', groups: true, standalone: true, plain: false }
+const collapsedGroups = new Set()
+try {
+  const saved = JSON.parse(localStorage.getItem(libraryViewKey) ?? '{}')
+  if (librarySorts.includes(saved.sort)) libraryView.sort = saved.sort
+  for (const key of ['groups', 'standalone', 'plain']) {
+    if (typeof saved[key] === 'boolean') libraryView[key] = saved[key]
+  }
+  if (Array.isArray(saved.collapsed)) for (const key of saved.collapsed) {
+    if (typeof key === 'string') collapsedGroups.add(key)
+  }
+} catch {}
 let library = []
 let selected
 let filter = 'All titles'
@@ -79,6 +93,7 @@ function metadata(title) {
 }
 
 function render() {
+  renderInsights()
   const tabs = ['All titles', ...statuses].map(label => {
     const count = label === 'All titles' ? library.length : library.filter(title => status(title) === label).length
     const tab = button(label + ' · ' + count, () => {
@@ -97,10 +112,29 @@ function render() {
   renderLists(currentList)
   let visible = library.filter(title => (currentList ? currentList.members.includes(title.id) : filter === 'All titles' || status(title) === filter) &&
     (title.title + ' ' + metadata(title) + ' ' + (groups.get(title.id)?.name ?? '')).toLowerCase().includes(query))
+  if (!currentList && !libraryView.plain) {
+    visible = visible.filter(title => groups.has(title.id) ? libraryView.groups : libraryView.standalone)
+  }
   if (currentList?.rewatch) visible = currentList.members.map(id => visible.find(title => title.id === id)).filter(Boolean)
+  else visible = sortTitles(visible, libraryView.sort)
+  const visibleGroups = new Set(visible.map(title => groups.get(title.id)?.key).filter(Boolean))
+  const groupButton = $('collapse-groups')
+  groupButton.hidden = Boolean(currentList || libraryView.plain || !visibleGroups.size)
+  const expanded = [...visibleGroups].some(key => !collapsedGroups.has(key))
+  groupButton.textContent = expanded ? 'Collapse all groups' : 'Expand all groups'
+  groupButton.onclick = () => {
+    for (const key of visibleGroups) {
+      if (expanded) collapsedGroups.add(key)
+      else collapsedGroups.delete(key)
+    }
+    rememberLibraryView()
+    render()
+    groupButton.focus()
+  }
   $('count').textContent = visible.length + (visible.length === 1 ? ' title' : ' titles')
   function titleRow(title) {
     const row = button('', () => {
+      if (selected !== title.id) detailTab = 'overview'
       selected = title.id
       render()
       $('detail').querySelector('h2').focus()
@@ -123,7 +157,7 @@ function render() {
   const rows = []
   const grouped = new Map()
   for (const title of visible) {
-    const group = !currentList && groups.get(title.id)
+    const group = !currentList && !libraryView.plain && groups.get(title.id)
     if (!group) {
       rows.push(titleRow(title))
       continue
@@ -131,9 +165,22 @@ function render() {
     let groupList = grouped.get(group.key)
     if (!groupList) {
       const groupHeader = node('div', '', 'group-heading')
-      groupHeader.append(node('strong', group.name))
+      const toggle = button(group.name, () => {
+        if (collapsedGroups.has(group.key)) collapsedGroups.delete(group.key)
+        else collapsedGroups.add(group.key)
+        rememberLibraryView()
+        render()
+        document.getElementById(groupId + '-toggle')?.focus()
+      }, 'group-toggle')
+      const groupId = 'title-group-' + rows.length
+      toggle.id = groupId + '-toggle'
+      toggle.setAttribute('aria-controls', groupId)
+      toggle.setAttribute('aria-expanded', String(!collapsedGroups.has(group.key)))
+      groupHeader.append(toggle)
       if (group.members.length > 1) groupHeader.append(button('Start group rewatch', () => beginGroupRewatch(group)))
       groupList = node('ul')
+      groupList.id = groupId
+      groupList.hidden = collapsedGroups.has(group.key)
       rows.push(listItem(groupHeader, groupList))
       grouped.set(group.key, groupList)
     }
@@ -154,9 +201,31 @@ function renderDetail(title) {
     detail.append(node('h2', 'Viewing history'), node('p', 'Select a title to see its viewing history.'))
     return
   }
+  const tabs = [{ id: 'overview', label: 'Overview' }, { id: 'history', label: 'Viewing history' }]
+  if (title.episodic || title.episodes.length) tabs.push({ id: 'episodes', label: 'Episodes' })
+  if (!tabs.some(tab => tab.id === detailTab)) detailTab = 'overview'
   const heading = node('h2', title.title)
   heading.tabIndex = -1
-  detail.append(heading, node('p', metadata(title) + ' · ' + status(title)))
+  const navigation = node('nav', '', 'detail-tabs')
+  navigation.setAttribute('aria-label', 'Title details views')
+  for (const tab of tabs) {
+    const control = button(tab.label, () => {
+      detailTab = tab.id
+      renderDetail(title)
+      detail.querySelector('[aria-pressed="true"]')?.focus()
+    })
+    control.setAttribute('aria-pressed', String(tab.id === detailTab))
+    navigation.append(control)
+  }
+  detail.append(heading, node('p', metadata(title) + ' · ' + status(title)), navigation)
+  if (detailTab === 'episodes') {
+    renderEpisodes(detail, title)
+    return
+  }
+  if (detailTab === 'history') {
+    renderViewingHistory(detail, title)
+    return
+  }
   if (title.imdb) {
     const source = node('a', 'IMDb ↗')
     source.href = 'https://www.imdb.com/title/' + title.imdb + '/'
@@ -174,17 +243,10 @@ function renderDetail(title) {
       () => update(start(title), 'Start date saved.'), 'primary'))
   }
   actions.append(button('Log past viewing', () => openViewing(title, 'past')), button('Edit title', () => openTitle(title)), button('Add to lists', () => openMemberships(title)))
-  detail.append(actions, node('h3', 'Viewing history'))
-  const history = node('ul', '', 'history')
-  title.history.slice().reverse().forEach((view, reverseIndex) => {
-    const info = node('div', view.finished ? 'Watched ' + formatDate(view.finished) : 'Watched · date unknown')
-    if (view.started) info.append(node('span', 'Started ' + formatDate(view.started)))
-    const index = title.history.length - 1 - reverseIndex
-    history.append(listItem(info, button('Edit dates', () => openViewing(title, 'edit', index))))
-  })
-  if (!title.history.length) history.append(listItem('No completed viewings yet.'))
-  detail.append(history)
-  if (title.episodic || title.episodes.length) renderEpisodes(detail, title)
+  detail.append(actions)
+  if (title.episodic || title.episodes.length) detail.append(episodeControls(title))
+  const summary = title.history.length + (title.history.length === 1 ? ' completed viewing' : ' completed viewings')
+  detail.append(node('p', summary, 'viewing-summary'))
   const secondary = node('div', '', 'actions end')
   if (title.active) secondary.append(button('Cancel current viewing', () => {
     if (confirm('Cancel the current viewing?')) update({ ...title, active: null }, 'Current viewing canceled.')
@@ -195,6 +257,19 @@ function renderDetail(title) {
     }
   }))
   detail.append(secondary)
+}
+
+function renderViewingHistory(detail, title) {
+  detail.append(button('Log past viewing', () => openViewing(title, 'past')))
+  const history = node('ul', '', 'history')
+  title.history.slice().reverse().forEach((view, reverseIndex) => {
+    const info = node('div', view.finished ? 'Watched ' + formatDate(view.finished) : 'Watched · date unknown')
+    if (view.started) info.append(node('span', 'Started ' + formatDate(view.started)))
+    const index = title.history.length - 1 - reverseIndex
+    history.append(listItem(info, button('Edit dates', () => openViewing(title, 'edit', index))))
+  })
+  if (!title.history.length) history.append(listItem('No completed viewings yet.'))
+  detail.append(history)
 }
 
 function openTitle(title) {
@@ -570,8 +645,7 @@ episodeForm.onsubmit = event => {
   }, episodeEdit.existing)) $('episode-dialog').close()
 }
 
-function renderEpisodes(detail, title) {
-  const section = node('section', '', 'episodes')
+function episodeControls(title) {
   const current = title.active?.id ? title.episodes.filter(view => view.run === title.active.id) : title.episodes
   const next = nextEpisode(current)
   const code = 'S' + next.season + ' E' + next.episode
@@ -579,8 +653,13 @@ function renderEpisodes(detail, title) {
   if (next.episode <= 99999) controls.append(button('Mark next episode watched · ' + code,
     () => saveEpisode(title, { ...next, date: today() }), 'primary'))
   controls.append(button('Log episode…', () => openEpisode(title, { ...next, episode: Math.min(next.episode, 99999) })))
+  return controls
+}
+
+function renderEpisodes(detail, title) {
+  const section = node('section', '', 'episodes')
   const unique = new Set(title.episodes.map(view => view.season + ':' + view.episode)).size
-  section.append(node('h3', 'Episodes'), node('p', unique + ' distinct episodes watched'), controls)
+  section.append(node('h3', 'Episodes'), node('p', unique + ' distinct episodes watched'), episodeControls(title))
   const seasons = new Map()
   for (const view of title.episodes) {
     const season = seasons.get(view.season) ?? []
@@ -783,5 +862,59 @@ for (const dialog of document.querySelectorAll('dialog')) {
 }
 
 globalThis.QuietScreenApp = syncApp
+initializeLibraryView()
 render()
 await import('./sync/account.js')
+
+function rememberLibraryView() {
+  try { localStorage.setItem(libraryViewKey, JSON.stringify({ ...libraryView, collapsed: [...collapsedGroups] })) }
+  catch { notice('Could not save the library view.') }
+}
+
+function initializeLibraryView() {
+  const sort = $('library-sort')
+  sort.value = libraryView.sort
+  sort.onchange = () => {
+    libraryView.sort = sort.value
+    rememberLibraryView()
+    render()
+  }
+  for (const [id, key] of [['show-groups', 'groups'], ['show-standalone', 'standalone'], ['plain-library', 'plain']]) {
+    const input = $(id)
+    input.checked = libraryView[key]
+    input.onchange = () => {
+      libraryView[key] = input.checked
+      $('show-groups').disabled = $('show-standalone').disabled = libraryView.plain
+      rememberLibraryView()
+      render()
+    }
+  }
+  $('show-groups').disabled = $('show-standalone').disabled = libraryView.plain
+}
+
+function renderInsights() {
+  const { counts, months, undated } = viewingInsights(library)
+  $('status-breakdown').replaceChildren(...Object.entries(counts).map(([label, count]) => {
+    const row = node('div', '', 'insight-status')
+    row.append(node('span', label), node('strong', String(count)))
+    return row
+  }))
+  const total = months.reduce((sum, month) => sum + month.count, 0)
+  $('watch-activity-summary').textContent = total + ' in the past 12 months' +
+    (undated ? ' · ' + undated + ' with unknown dates' : '')
+  const scale = Math.max(1, ...months.map(month => month.count))
+  const shortMonth = new Intl.DateTimeFormat(undefined, { month: 'short' })
+  const fullMonth = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
+  $('watch-activity').replaceChildren(...months.map(({ date, count }) => {
+    const column = node('li')
+    const marker = node('span', '', 'month-bar')
+    marker.style.height = (count / scale * 100) + '%'
+    const track = node('span', '', 'month-track')
+    track.setAttribute('aria-hidden', 'true')
+    track.append(marker)
+    column.setAttribute('aria-label', fullMonth.format(date) + ' · ' + count)
+    column.title = fullMonth.format(date) + ' · ' + count
+    column.append(track, node('span', shortMonth.format(date), 'month-label'))
+    return column
+  }))
+}

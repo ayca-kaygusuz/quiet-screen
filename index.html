@@ -6,6 +6,7 @@
   <title>Quiet Screen</title>
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.mjs"></script>
+  <script type="module" src="update-ui.mjs"></script>
 </head>
 <body>
   <main>
@@ -26,7 +27,7 @@
         </select>
       </label>
       <div class="actions">
-        <div id="syncOverview" class="sync-overview"><button id="syncIndicator" class="sync-indicator" type="button" aria-controls="syncPopover" aria-expanded="false" aria-label="Local only. Show sync details" data-state="local"><span class="sync-dot" aria-hidden="true"></span><span class="sync-indicator-copy"><span id="syncIndicatorLabel">Local only</span><span id="syncIndicatorDetail">Saved on this device</span></span></button><span id="syncIndicatorAnnouncement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span><section id="syncPopover" class="sync-popover" aria-labelledby="syncPopoverHeading" hidden><h2 id="syncPopoverHeading">Local only</h2><p id="syncPopoverDetail">Your library is saved on this device.</p><p id="syncPopoverLastSaved" class="muted" hidden></p><div class="actions"><button id="quickSync" class="primary" type="button" hidden>Sync now</button><button id="syncAccount" type="button">Account &amp; settings</button></div></section></div><button id="accountButton" aria-controls="accountPage" aria-expanded="false">Account</button>
+        <div id="syncOverview" class="sync-overview"><button id="syncIndicator" class="sync-indicator" type="button" aria-controls="syncPopover" aria-expanded="false" aria-label="Local only. Show sync details" data-state="local"><span class="sync-dot" aria-hidden="true"></span><span class="sync-indicator-copy"><span id="syncIndicatorLabel">Local only</span><span id="syncIndicatorDetail">Saved on this device</span></span></button><span id="syncIndicatorAnnouncement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span><section id="syncPopover" class="sync-popover" aria-labelledby="syncPopoverHeading" hidden><h2 id="syncPopoverHeading">Local only</h2><p id="syncPopoverDetail">Your library is saved on this device.</p><p id="syncPopoverLastSaved" class="muted" hidden></p><div class="actions"><button id="quickSync" class="primary" type="button" hidden>Sync now</button><button id="syncAccount" type="button">Account &amp; settings</button></div></section></div><button id="update-chip" aria-controls="update-card" aria-expanded="false" hidden>Updates</button><button id="accountButton" aria-controls="accountPage" aria-expanded="false">Account</button>
         <button id="backup">Back up</button><button id="restore">Restore</button>
         <button id="add" class="primary">+ Add title</button>
       </div>
@@ -37,13 +38,47 @@
       <h1>Your watch library</h1>
       <p>Movies, shows, and everything you watch.</p>
     </section>
+    <details id="insights" class="panel" open>
+      <summary>Library insights</summary>
+      <div class="insights-grid">
+        <section aria-labelledby="watch-status-heading">
+          <h3 id="watch-status-heading">Watch status</h3>
+          <div id="status-breakdown"></div>
+        </section>
+        <section aria-labelledby="watch-activity-heading">
+          <h3 id="watch-activity-heading">Completed viewings</h3>
+          <p id="watch-activity-summary"></p>
+          <ol id="watch-activity" aria-label="Dated completed viewings in the last 12 months"></ol>
+        </section>
+      </div>
+    </details>
     <nav id="filters" aria-label="Filter by watch status"></nav>
     <nav id="list-tabs" aria-label="Custom lists"></nav>
     <section class="panel" id="list-context" aria-label="List details" hidden></section>
     <div class="layout">
       <section class="panel" aria-labelledby="library-heading">
         <div class="bar"><h2 id="library-heading">Titles</h2><span id="count"></span></div>
-        <label class="field">Search your library<input id="library-search" type="search" placeholder="Title or format"></label>
+        <div class="library-tools">
+          <label class="field">Search your library<input id="library-search" type="search" placeholder="Title, format, or group"></label>
+          <label class="field">Sort by<select id="library-sort">
+            <option value="added">Date added · oldest first</option>
+            <option value="newest">Date added · newest first</option>
+            <option value="title">Title · A–Z</option>
+            <option value="title-desc">Title · Z–A</option>
+            <option value="year">Release year</option>
+            <option value="watched">Most recently watched</option>
+            <option value="status">Watch status</option>
+          </select></label>
+        </div>
+        <details id="library-display">
+          <summary>Library display</summary>
+          <div class="actions library-display-controls">
+            <label><input type="checkbox" id="show-groups" checked> Show groups</label>
+            <label><input type="checkbox" id="show-standalone" checked> Show standalones</label>
+            <label><input type="checkbox" id="plain-library"> Plain list</label>
+            <button id="collapse-groups" type="button">Collapse all groups</button>
+          </div>
+        </details>
         <ul id="titles"></ul>
       </section>
       <aside class="panel" id="detail" aria-label="Title details"></aside>
@@ -55,10 +90,31 @@
 <section class="panel account-panel"><div class="account-section-heading"><h2>Google Drive sync</h2><span id="syncBadge" class="pill">Local only</span></div><p id="syncStatus" role="status">Sign in to sync your library and view preferences.</p><p id="syncLastSaved" class="muted"></p><label class="toggle account-toggle"><span>Automatic sync</span><input id="autoSync" type="checkbox" role="switch" checked><span class="switch-track" aria-hidden="true"></span></label><p class="muted">Syncs while Quiet Screen is open. Offline changes wait on this device until it reconnects.</p><label class="toggle account-toggle"><span>Treat this connection as metered</span><input id="meteredConnection" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label><p id="meteredStatus" class="muted">Automatic sync pauses on metered connections. You can always sync manually.</p><div class="actions"><button id="syncNow" class="primary" type="button" disabled>Sync now</button><button id="resetMetered" type="button" hidden>Use detected connection</button></div><div id="copyLocalSection" class="account-note" hidden><p id="copyLocalHint" class="muted"></p><button id="copyLocalLibrary" type="button">Combine local library with this account</button></div><p class="muted">Includes titles, viewing history, episodes, groups, lists, franchise rewatches, and theme. Sign-in credentials stay separate.</p></section>
 <section class="panel account-panel"><h2>Backups &amp; restore</h2><p class="muted">Keep a JSON copy of your current library and view preferences. Works with or without an account.</p><div class="actions"><button id="account-backup" type="button">Back up</button><button id="account-restore" type="button">Restore</button></div><p class="muted">Once connected, a restored backup becomes a change to that account’s library and will sync when enabled.</p><div id="recoverySection" class="account-note" hidden><label for="recoveryChoice">Recovery copies saved before connecting</label><select id="recoveryChoice" aria-label="Choose a recovery copy"></select><button id="downloadRecovery" type="button">Download recovery copy</button><p class="muted">The latest three connection recovery sets stay on this device. Download one to keep it or restore it later.</p></div></section>
 
+<section class="panel account-panel" aria-labelledby="updates-heading">
+  <div class="account-section-heading"><h2 id="updates-heading">App updates</h2><span class="pill" id="current-version"></span></div>
+  <label class="toggle account-toggle"><span>Automatic update checks</span><input id="auto-updates" type="checkbox" role="switch" checked><span class="switch-track" aria-hidden="true"></span></label>
+  <p id="update-policy"></p>
+  <p id="update-status" role="status"></p>
+  <p id="update-checked"></p>
+  <div class="actions">
+    <button id="check-updates" type="button">Check for updates</button>
+    <button id="inline-update" type="button" class="primary" hidden></button>
+    <a href="https://github.com/ayca-kaygusuz/quiet-screen/releases/latest" target="_blank" rel="noopener noreferrer">GitHub Releases ↗</a>
+  </div>
+</section>
 <section id="syncConflictsSection" class="panel account-panel account-wide" hidden><h2>Review sync changes</h2><p class="muted">These values changed on more than one device before they synced. Choose which one to keep; both choices remain saved until you decide.</p><div id="syncConflicts"></div></section><section class="panel account-panel account-wide"><h2>About Quiet Screen</h2><p>Copyright 2026 Alex (Ayca Kaygusuz). <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License 2.0</a>.</p></section></div></section>
     <footer><span id="storageLabel">Saved in this browser</span><span id="notice" role="status"></span></footer>
   </main>
 
+  <section id="update-card" class="panel" aria-labelledby="update-heading" tabindex="-1" hidden>
+    <div class="bar">
+      <h2 id="update-heading" role="status"></h2>
+      <button id="hide-update-card" type="button" aria-label="Hide update progress">×</button>
+    </div>
+    <p id="update-detail"></p>
+    <progress id="update-progress" max="100" aria-label="Update progress" hidden></progress>
+    <button id="card-update" type="button" class="primary" hidden></button>
+  </section>
   <dialog id="title-dialog" aria-labelledby="title-heading">
     <form id="title-form">
       <h2 id="title-heading">Add title</h2>

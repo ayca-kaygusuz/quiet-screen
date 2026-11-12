@@ -1,3 +1,4 @@
+import { createBrowserReleaseHandler } from './releases.mjs'
 import { createServer } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -44,6 +45,8 @@ export function createAppServer(request = fetch, environment = process.env) {
     (!publicOrigin && (desktopConfiguration || environment.QUIET_SCREEN_GOOGLE_WEB_CLIENT_SECRET) ? localSessionKey() : undefined)
   const account = createWebAccount(environment, { desktopConfiguration, sessionKey, fetcher: request })
 
+  const updateCheck = createBrowserReleaseHandler({ fetcher: request })
+
   return createServer(async (req, res) => {
     try {
       const port = req.socket?.localPort
@@ -66,6 +69,8 @@ export function createAppServer(request = fetch, environment = process.env) {
           method: req.method, headers: req.headers,
           ...(req.method === 'POST' ? { body: Buffer.concat(chunks) } : {}),
         }))
+      } else if (url.pathname === '/api/update-check') {
+        response = await updateCheck(new Request(url, { method: req.method, headers: req.headers }))
       } else {
         response = await serveApp(url, req.method, request)
       }

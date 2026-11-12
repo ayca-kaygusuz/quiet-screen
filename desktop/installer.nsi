@@ -2,6 +2,9 @@ Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "x64.nsh"
+!include "FileFunc.nsh"
+
+Var RestartAfterUpdate
 
 
 Name "Quiet Screen"
@@ -56,10 +59,40 @@ Function .onInit
     Abort
   ${EndIf}
   SetShellVarContext current
+  StrCpy $RestartAfterUpdate 0
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} "$0" "/RESTARTAPP" $1
+  ${IfNot} ${Errors}
+    StrCpy $RestartAfterUpdate 1
+  ${EndIf}
+  ClearErrors
+  ${GetOptions} "$0" "/UPDATEPID=" $1
+  ${IfNot} ${Errors}
+    ; The app launches this installer before quitting. Wait for that exact process.
+    ${If} $1 > 0
+      System::Call 'kernel32::OpenProcess(i 0x100000, i 0, i r1) p.r2'
+      ${If} $2 != 0
+        System::Call 'kernel32::WaitForSingleObject(p r2, i 30000) i.r3'
+        System::Call 'kernel32::CloseHandle(p r2)'
+        ${If} $3 != 0
+          MessageBox MB_OK|MB_ICONEXCLAMATION "Quiet Screen is still closing. Please try the update again." /SD IDOK
+          Abort
+        ${EndIf}
+        Sleep 1000
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
   FindWindow $0 "Chrome_WidgetWin_1" "Quiet Screen"
   ${If} $0 != 0
     MessageBox MB_OK|MB_ICONINFORMATION "Close Quiet Screen, then run this installer again."
     Abort
+  ${EndIf}
+FunctionEnd
+
+Function .onInstSuccess
+  ${If} $RestartAfterUpdate == 1
+    Exec '"$INSTDIR\Quiet Screen.exe"'
   ${EndIf}
 FunctionEnd
 

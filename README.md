@@ -95,3 +95,19 @@ Run `node --test` for the merge, OAuth and Drive fixture tests.
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+## App updates and library views
+
+Open **Account → App updates** for the installed version, last check, and
+automatic-check preference. Automatic checks pause while offline or on a
+metered connection. On Windows, choose **Download update** to verify and save
+an installer, then **Restart and update** when ready. The progress card and
+Windows taskbar show download progress. While GitHub requires sign-in to access
+releases, use the **GitHub Releases** link to install manually. The local web
+app checks for releases and opens GitHub for downloads.
+
+**Library insights** shows current watch-status counts and completed viewings
+by month. Undated history is counted separately. **Library display** controls
+grouped and plain views, group visibility, and expanding or collapsing groups.
+The selected sort and display controls are remembered on the device. The
+details panel offers Overview, Viewing history, and Episodes where applicable.

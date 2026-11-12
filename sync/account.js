@@ -116,7 +116,7 @@
    return '<div class="sync-conflict"><strong>'+App.esc(label)+'</strong><label class="sr-only" for="conflict-'+i+'">Value to keep</label><select id="conflict-'+i+'">'+conflict.choices.map((value,n)=>'<option value="'+n+'">'+App.esc(describe(value))+'</option>').join('')+'</select><button data-resolve-conflict="'+i+'" type="button">Keep selected value</button></div>';
   }).join('');
   const options=recoveryOptions(),selected=$('#recoveryChoice').value;$('#recoverySection').hidden=!options.length;$('#recoveryChoice').innerHTML=options.map(option=>'<option value="'+App.esc(option.value)+'">'+App.esc(option.label)+'</option>').join('');if(options.some(o=>o.value===selected))$('#recoveryChoice').value=selected;
-  renderSetup();renderSyncIndicator();
+  renderSetup();renderSyncIndicator();root.QuietScreenUpdates?.connectionChanged();
  }
  function recordChange(){
   if(applying||!workspaceReady)return;

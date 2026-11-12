@@ -26,7 +26,7 @@ await cp(runtime, appDir, {
 })
 await rename(join(appDir, 'electron.exe'), join(appDir, 'Quiet Screen.exe'))
 await mkdir(join(payload, 'desktop'), { recursive: true })
-for (const name of ['package.json', 'index.html', 'style.css', 'app.mjs', 'app-response.mjs', 'library.mjs', 'LICENSE', 'NOTICE', 'sync', 'desktop/main.mjs', 'desktop/google-account.mjs']) {
+for (const name of ['package.json', 'index.html', 'style.css', 'app.mjs', 'app-response.mjs', 'library.mjs', 'releases.mjs', 'update-ui.mjs', 'LICENSE', 'NOTICE', 'sync', 'desktop/main.mjs', 'desktop/google-account.mjs', 'desktop/updates.mjs']) {
   await cp(join(project, name), join(payload, name), { recursive: true })
 }
 

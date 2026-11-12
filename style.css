@@ -212,3 +212,33 @@ footer { margin-top: 16px; font-size: .85rem; }
 #results [role="option"] { padding: 8px 10px; cursor: pointer; }
 #results [role="option"]:hover, #results [aria-selected="true"] { background: var(--selected); color: var(--accent); }
 #imdb-search { font-size: .85rem; }
+#insights { margin-bottom: 18px; }
+#insights > summary, #library-display > summary { cursor: pointer; font-weight: 650; }
+.insights-grid { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr); gap: 22px; }
+.insights-grid h3 { margin-top: 14px; }
+.insight-status { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
+#watch-activity-summary { font-size: .85rem; margin: 2px 0 8px; }
+#watch-activity { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); list-style: none; padding: 0; margin: 0; gap: 5px; }
+#watch-activity li { display: grid; justify-items: center; gap: 4px; min-width: 0; border: 0; }
+.month-track { display: flex; align-items: end; background: var(--field); width: 100%; height: 64px; border-radius: 4px; overflow: hidden; }
+.month-bar { width: 100%; background: var(--accent); }
+.month-label { font-size: .67rem; color: var(--muted); overflow: hidden; max-width: 100%; }
+.library-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .86fr); gap: 10px; }
+#library-display { border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 6px; }
+.library-display-controls { margin-top: 8px; font-size: .85rem; }
+.library-display-controls input { accent-color: var(--accent); }
+.group-toggle { background: transparent; border-color: transparent; text-align: left; font-weight: 650; }
+.group-toggle::before { content: '▸'; margin-right: .45em; }
+.group-toggle[aria-expanded="true"]::before { content: '▾'; }
+.detail-tabs { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.detail-tabs button { font-size: .84rem; }
+.viewing-summary { margin-top: 12px; }
+#update-card { position: fixed; right: 20px; bottom: 20px; width: min(365px, calc(100vw - 40px)); z-index: 42; }
+#update-card progress { display: block; width: 100%; accent-color: var(--accent); margin-bottom: 12px; }
+@media (min-width: 691px) {
+  #detail { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow: auto; }
+}
+@media (max-width: 690px) {
+  .insights-grid, .library-tools { grid-template-columns: 1fr; gap: 4px; }
+  #watch-activity { gap: 3px; }
+}
