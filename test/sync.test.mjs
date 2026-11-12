@@ -79,3 +79,22 @@ test('automatic grouping can be overridden and episode numbering starts at S1 E1
   assert.equal(groups.has('standalone'), false)
   assert.deepEqual(nextEpisode([]), { season: 1, episode: 1 })
 })
+
+test('Drive reports setup, permission and policy denials without exposing Google response details', async () => {
+  const { createDriveStore } = await import('../sync/drive.mjs')
+  const cases = [
+    [{ details: [{ reason: 'SERVICE_DISABLED' }] }, 'DRIVE_API_DISABLED'],
+    [{ errors: [{ reason: 'accessNotConfigured' }] }, 'DRIVE_API_DISABLED'],
+    [{ details: [{ reason: 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' }] }, 'SIGN_IN_REQUIRED'],
+    [{ errors: [{ reason: 'insufficientPermissions' }] }, 'SIGN_IN_REQUIRED'],
+    [{ errors: [{ reason: 'domainPolicy' }] }, 'DRIVE_POLICY'],
+    [{ errors: [{ reason: 'userRateLimitExceeded' }] }, 'DRIVE_UNAVAILABLE'],
+  ]
+  for (const [error, code] of cases) {
+    const store = createDriveStore({
+      accessToken: async () => 'test-only',
+      fetcher: async () => Response.json({ error: { ...error, message: 'private upstream detail' } }, { status: 403 }),
+    })
+    await assert.rejects(store.list(), failure => failure.code === code && !failure.message.includes('private upstream detail'))
+  }
+})

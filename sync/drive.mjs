@@ -11,12 +11,35 @@ export async function limitedJSON(response,limit=Sync.MAX_BYTES){
  else{text=await response.text();if(text.length>limit)throw Error('The Drive copy is too large.')}
  return JSON.parse(text);
 }
+async function driveError(response) {
+ const denied = response.status === 403;
+ const report = denied ? await limitedJSON(response, 64 * 1024).catch(() => null) : null;
+ const reasons = new Set([
+  ...(Array.isArray(report?.error?.errors) ? report.error.errors.map(error => error?.reason) : []),
+  ...(Array.isArray(report?.error?.details) ? report.error.details.map(error => error?.reason) : []),
+ ]);
+ if (response.status === 401 || reasons.has('ACCESS_TOKEN_SCOPE_INSUFFICIENT') ||
+     reasons.has('insufficientPermissions')) {
+  return Object.assign(Error('Reconnect Google and allow Quiet Screen to access its app data in Drive.'), {code:'SIGN_IN_REQUIRED'});
+ }
+ if (reasons.has('SERVICE_DISABLED') || reasons.has('accessNotConfigured')) {
+  return Object.assign(Error('Google Drive API is disabled for the Quiet Screen Google Cloud project. Enable it, then choose Check Drive again.'), {code:'DRIVE_API_DISABLED'});
+ }
+ if (reasons.has('domainPolicy')) {
+  return Object.assign(Error('Your Google Workspace administrator has blocked this app’s Drive access.'), {code:'DRIVE_POLICY'});
+ }
+ if (response.status === 429 || reasons.has('rateLimitExceeded') || reasons.has('userRateLimitExceeded')) {
+  return Object.assign(Error('Google Drive is busy. Your local changes are safe; try again later.'), {code:'DRIVE_UNAVAILABLE'});
+ }
+ return Object.assign(Error(denied ? 'Google Drive refused access. Check that Drive API and the app-data permission are enabled.' :
+  'Google Drive could not be reached. Your local changes are safe.'), {code:'DRIVE_UNAVAILABLE'});
+}
 export function createDriveStore({accessToken,fetcher=fetch}){
  async function call(url,options={}){
   for(let attempt=0;attempt<2;attempt++){
    const token=await accessToken(attempt>0),response=await fetcher(url,{...options,headers:{...options.headers,Authorization:'Bearer '+token},redirect:'error',signal:AbortSignal.timeout(45000)});
    if(response.status===401&&attempt===0)continue;
-   if(!response.ok){const e=Error(response.status===401?'Sign in to Google again to reconnect Drive.':response.status===403?'Google Drive access was refused. Check that Drive API and the app-data permission are enabled.':response.status===429?'Google Drive is busy. Your local changes are safe; try again later.':'Google Drive could not be reached. Your local changes are safe.');e.code=response.status===401?'SIGN_IN_REQUIRED':'DRIVE_UNAVAILABLE';throw e}
+   if(!response.ok)throw await driveError(response);
    return response;
   }
  }

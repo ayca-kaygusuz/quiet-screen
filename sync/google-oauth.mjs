@@ -40,7 +40,11 @@ async function googleToken(parameters,fetcher){
   const message=configuration?'This app build has incomplete or invalid Google sign-in configuration. Update Quiet Screen; the developer needs to correct the release settings.':reason==='invalid_grant'?'Google could not accept this sign-in attempt. Start Sign in with Google again.':reason==='access_denied'?'Google access was declined. Sign in again and approve the requested permissions.':reason==='invalid_request'?'Google rejected the sign-in request. The developer needs to check the app’s connection settings.':'Google could not be reached. Try again when you are online.';
   const error=Error(message);error.code=configuration?'GOOGLE_CLIENT_CONFIGURATION':['invalid_grant','access_denied'].includes(reason)?'SIGN_IN_REQUIRED':'GOOGLE_AUTH_UNAVAILABLE';error.oauthError=reason;throw error;
  }
- const data=await response.json();if(typeof data.access_token!=='string'||data.access_token.length>8000||data.scope&&!data.scope.split(' ').includes(DRIVE_SCOPE))throw Error('Google Drive app-data permission was not granted.');return data;
+ const data=await response.json();if(typeof data.access_token!=='string'||data.access_token.length>8000)throw Error('Google did not return a valid access token.');
+ if(data.scope&&!data.scope.split(/\s+/).some(scope=>scope===DRIVE_SCOPE||scope==='https://www.googleapis.com/auth/drive.appfolder')){
+  throw Object.assign(Error('Google Drive app-data permission was not granted. Reconnect Google and allow access to Quiet Screen’s app data.'),{code:'SIGN_IN_REQUIRED'});
+ }
+ return data;
 }
 export const exchangeGoogleCode=({clientId,clientSecret,code,redirectURI,verifier},fetcher=fetch)=>googleToken({client_id:clientId,...(clientSecret?{client_secret:clientSecret}:{}),code,redirect_uri:redirectURI,code_verifier:verifier,grant_type:'authorization_code'},fetcher);
 export const refreshGoogleToken=({clientId,clientSecret,refreshToken},fetcher=fetch)=>googleToken({client_id:clientId,...(clientSecret?{client_secret:clientSecret}:{}),refresh_token:refreshToken,grant_type:'refresh_token'},fetcher);
