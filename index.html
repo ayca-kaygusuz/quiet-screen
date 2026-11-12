@@ -63,10 +63,10 @@
     <form id="title-form">
       <h2 id="title-heading">Add title</h2>
       <section id="lookup" aria-label="IMDb lookup">
-        <label class="field">Find on IMDb<input id="query" type="search" maxlength="150" placeholder="Title or IMDb link"></label>
-        <div class="actions"><button type="button" id="find">Search IMDb</button><a id="imdb-search" target="_blank" rel="noopener noreferrer">Open IMDb ↗</a></div>
+        <label class="field">Find on IMDb<input id="query" type="search" maxlength="150" placeholder="Title or IMDb link" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="results"></label>
         <p id="lookup-status" role="status"></p>
-        <ul id="results"></ul>
+        <ul id="results" role="listbox" aria-label="IMDb suggestions" hidden></ul>
+        <a id="imdb-search" target="_blank" rel="noopener noreferrer">Open IMDb ↗</a>
       </section>
       <label class="field">Title<input name="title" required maxlength="300"></label>
       <div class="columns">

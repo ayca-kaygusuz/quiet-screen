@@ -205,3 +205,10 @@ footer { margin-top: 16px; font-size: .85rem; }
 .episodes summary { cursor: pointer; color: var(--accent); }
 .episodes li > details { flex-basis: 100%; margin: 0; }
 .episodes li > details .actions { margin: 6px 0; }
+#lookup .field { margin-bottom: 4px; }
+#lookup-status { margin: 4px 0; }
+#lookup-status:empty { display: none; }
+#results { border: 1px solid var(--border); border-radius: 9px; background: var(--field); margin: 4px 0 8px; }
+#results [role="option"] { padding: 8px 10px; cursor: pointer; }
+#results [role="option"]:hover, #results [aria-selected="true"] { background: var(--selected); color: var(--accent); }
+#imdb-search { font-size: .85rem; }

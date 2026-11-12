@@ -279,65 +279,104 @@ viewForm.onsubmit = event => {
   if (update(saveViewing(title, mode, { id: title.history[index]?.id ?? viewingId(), started, finished }, index), 'Viewing saved.')) $('view-dialog').close()
 }
 
+const queryInput = $('query')
+const results = $('results')
+let searchTimer
+let activeResult = -1
+
+function closeSuggestions() {
+  activeResult = -1
+  results.replaceChildren()
+  results.hidden = true
+  queryInput.setAttribute('aria-expanded', 'false')
+  queryInput.removeAttribute('aria-activedescendant')
+}
+
 function resetSearch() {
+  clearTimeout(searchTimer)
   request?.abort()
-  const query = $('query').value.trim()
+  request = null
+  const query = queryInput.value.trim()
   const id = imdbId(query)
   $('imdb-search').href = id ? 'https://www.imdb.com/title/' + id + '/'
     : 'https://www.imdb.com/find/?s=tt&q=' + encodeURIComponent(query)
-  $('results').replaceChildren()
+  closeSuggestions()
   $('lookup-status').textContent = ''
-  $('find').disabled = false
 }
 
-async function searchImdb() {
-  resetSearch()
-  const query = $('query').value.trim()
-  if (query.length < 2) {
-    $('lookup-status').textContent = 'Enter at least two characters.'
-    return
-  }
+function selectImdb(match) {
+  for (const key of ['title', 'format', 'year', 'imdb']) fields[key].value = match[key]
+  refreshEpisodeDefault()
+  fields.title.setCustomValidity('')
+  fields.imdb.setCustomValidity('')
+  closeSuggestions()
+  $('lookup-status').textContent = 'Selected ' + match.title + '.'
+  fields.title.focus()
+}
+
+async function searchImdb(query) {
   const controller = new AbortController()
   request = controller
-  $('find').disabled = true
   $('lookup-status').textContent = 'Searching IMDb…'
-  const id = imdbId(query)
-  if (id) {
-    fields.imdb.value = id
-    fields.imdb.setCustomValidity('')
-  }
   try {
     const response = await fetch('/api/imdb?q=' + encodeURIComponent(query), { signal: controller.signal })
     if (!response.ok) throw new Error()
     const matches = await response.json()
     if (controller.signal.aborted) return
-    $('lookup-status').textContent = matches.length ? 'Choose a match to fill in the title details.' : 'No matches found.'
-    $('results').replaceChildren(...matches.map(match => listItem(button(
-      match.title + ' · ' + metadata(match), () => {
-        for (const key of ['title', 'format', 'year', 'imdb']) fields[key].value = match[key]
-        refreshEpisodeDefault()
-        fields.title.setCustomValidity('')
-        fields.imdb.setCustomValidity('')
-        $('results').replaceChildren()
-        $('lookup-status').textContent = 'Selected ' + match.title + '.'
-        fields.title.focus()
-      }, 'row'))))
+    $('lookup-status').textContent = matches.length ? 'Choose an IMDb match.' : 'No matches found.'
+    results.replaceChildren(...matches.map((match, index) => {
+      const option = node('li', match.title + ' · ' + metadata(match), 'row')
+      option.id = 'imdb-option-' + index
+      option.setAttribute('role', 'option')
+      option.setAttribute('aria-selected', 'false')
+      option.onmousedown = event => event.preventDefault()
+      option.onclick = () => selectImdb(match)
+      return option
+    }))
+    results.hidden = !matches.length
+    queryInput.setAttribute('aria-expanded', String(Boolean(matches.length)))
   } catch {
     if (!controller.signal.aborted) $('lookup-status').textContent = 'IMDb lookup is unavailable. Open IMDb or enter the title below.'
   } finally {
-    if (request === controller) $('find').disabled = false
+    if (request === controller) request = null
   }
 }
 
-$('query').oninput = resetSearch
-$('query').onkeydown = event => {
-  if (event.key !== 'Enter') return
-  event.preventDefault()
-  searchImdb()
+function queueImdbSearch() {
+  resetSearch()
+  const query = queryInput.value.trim()
+  if (query.length >= 2) searchTimer = setTimeout(() => searchImdb(query), 280)
 }
-$('find').onclick = searchImdb
+
+queryInput.oninput = event => {
+  if (!event.isComposing) queueImdbSearch()
+}
+queryInput.oncompositionend = queueImdbSearch
+queryInput.onkeydown = event => {
+  if (event.isComposing) return
+  const options = results.children
+  if (event.key === 'Escape' && (options.length || request)) {
+    event.preventDefault()
+    resetSearch()
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    options[activeResult]?.click()
+    return
+  }
+  if (!options.length || !['ArrowDown', 'ArrowUp'].includes(event.key)) return
+  event.preventDefault()
+  options[activeResult]?.setAttribute('aria-selected', 'false')
+  if (event.key === 'ArrowDown') activeResult = (activeResult + 1) % options.length
+  else activeResult = activeResult <= 0 ? options.length - 1 : activeResult - 1
+  const option = options[activeResult]
+  option.setAttribute('aria-selected', 'true')
+  queryInput.setAttribute('aria-activedescendant', option.id)
+  option.scrollIntoView({ block: 'nearest' })
+}
 $('title-dialog').onclose = () => {
-  request?.abort()
+  resetSearch()
   globalThis.QuietScreenAccount?.resume()
 }
 $('view-dialog').onclose = () => globalThis.QuietScreenAccount?.resume()
