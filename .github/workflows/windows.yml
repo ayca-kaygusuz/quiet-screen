@@ -1,0 +1,41 @@
+name: Windows build and Google configuration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
+      - name: Verify Google client configuration and configure Windows app
+        env:
+          QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID }}
+          QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          QUIET_SCREEN_GOOGLE_WEB_CLIENT_ID: ${{ vars.QUIET_SCREEN_GOOGLE_WEB_CLIENT_ID }}
+          QUIET_SCREEN_GOOGLE_WEB_CLIENT_SECRET: ${{ secrets.QUIET_SCREEN_GOOGLE_WEB_CLIENT_SECRET }}
+        run: |
+          node scripts/check-google-release.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/configure-desktop.mjs
+      - name: Install Windows build tools
+        run: |
+          npm install --no-save --package-lock=false electron@45.2.3
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          choco install nsis --yes --no-progress
+      - name: Build installer
+        run: node desktop/build.mjs node_modules/electron/dist "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quiet-screen-windows-x64
+          path: |
+            work/windows/Quiet-Screen-Setup-*-x64.exe
+            work/windows/SHA256SUMS.txt
+          if-no-files-found: error

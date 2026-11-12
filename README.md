@@ -32,3 +32,66 @@ node desktop/build.mjs <electron-distribution-directory> <makensis.exe>
 ```
 
 The build outputs a versioned installer and SHA-256 checksum in `work/windows`. It also prints the path to the unpacked app.
+
+## Episodes, groups and lists
+
+Turn on **Track individual episodes** for a title. The next-episode button logs
+today and advances within the current season. Use **Log episode…** to choose a
+different season or number, or to leave the date unknown. Starting a title
+rewatch gives it a fresh episode sequence.
+
+Quiet Screen groups recognizable sequel, season and subtitle names. Choose a
+group name manually to bring related titles together, or keep a title
+standalone. **Start group rewatch** queues a group's installments in release
+order and starts the first available installment. Open the queue from the list
+tabs to start the next installment after finishing the current one.
+
+Use **Watchlist** for titles you plan to watch and its checkmark to record a
+viewing today. **New list** creates a custom list. Open a title and use **Add to
+lists** to put it on one or more lists.
+
+## Google Drive sync
+
+Use **Account → Sign in with Google**. Quiet Screen first checks Drive and
+shows counts. You can sync your local library, combine it with Drive, or open
+the Drive copy. A recovery set is saved before changing libraries. The Account
+page includes manual sync, automatic sync and metered connection controls,
+conflict review, backup/restore, and recovery downloads. The header indicator
+shows whether changes are synced, waiting, paused or need attention.
+
+Sync includes watch history, episode viewings, franchise groups, lists and
+rewatch queues, and the active theme. Google credentials and the signed-out
+library are kept separately. Quiet Screen uses its own file namespace in
+Google Drive's hidden app-data folder. Keep both OAuth clients in the same
+Quiet Screen Google Cloud project, enable Drive API, and add test users when
+the app is in Google's Testing mode.
+
+### Configure Google sign-in
+
+- **Windows release and local browser:** supply the Desktop OAuth JSON or
+  its `client_secret` using `QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_SECRET`. If it
+  contains only the raw secret, also set the public client ID in
+  `QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID`. Run
+  `node scripts/configure-desktop.mjs` before building Windows. The local web
+  server can read that generated file or the environment directly. Windows
+  uses the system browser, a temporary loopback callback, and OS-encrypted
+  token storage. The local browser uses `http://127.0.0.1:4178/api/account/callback`
+  and an encrypted HttpOnly session cookie.
+- **Hosted web:** set `QUIET_SCREEN_GOOGLE_WEB_CLIENT_SECRET` at server runtime
+  using Web OAuth JSON or the raw secret plus
+  `QUIET_SCREEN_GOOGLE_WEB_CLIENT_ID`. Set `QUIET_SCREEN_PUBLIC_ORIGIN` to the
+  exact HTTPS origin and `QUIET_SCREEN_SESSION_KEY` to 32 random bytes encoded
+  as Base64. Register `<origin>/api/account/callback` on the Web client. Pass the
+  public Host header through the HTTPS reverse proxy. Keep the Web secret on
+  the server. It is excluded from the Windows build and browser assets.
+- **GitHub Actions:** the Windows workflow reads the two repository secrets
+  named above and the matching optional client ID variables. It checks each
+  configured client pair with Google, then builds the Windows installer with
+  Desktop configuration. GitHub Actions secrets do not configure a running
+  local or hosted web server.
+
+Run `node --test` for the merge, OAuth and Drive fixture tests.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

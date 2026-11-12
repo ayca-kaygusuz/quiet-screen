@@ -1,9 +1,11 @@
 {
   "name": "quiet-screen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "productName": "Quiet Screen",
   "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
   "main": "desktop/main.mjs",
-  "scripts": { "start": "node server.mjs", "build:windows": "node desktop/build.mjs" },
+  "scripts": { "start": "node server.mjs", "test": "node --test", "build:windows": "node desktop/build.mjs" },
   "engines": { "node": ">=24" }
 }

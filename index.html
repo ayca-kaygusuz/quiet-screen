@@ -9,7 +9,7 @@
 </head>
 <body>
   <main>
-    <header class="bar">
+    <header class="bar app-header">
       <div class="brand"><span aria-hidden="true">▷</span> Quiet Screen</div>
       <label class="theme-control" for="theme">Theme
         <select id="theme">
@@ -26,15 +26,20 @@
         </select>
       </label>
       <div class="actions">
+        <div id="syncOverview" class="sync-overview"><button id="syncIndicator" class="sync-indicator" type="button" aria-controls="syncPopover" aria-expanded="false" aria-label="Local only. Show sync details" data-state="local"><span class="sync-dot" aria-hidden="true"></span><span class="sync-indicator-copy"><span id="syncIndicatorLabel">Local only</span><span id="syncIndicatorDetail">Saved on this device</span></span></button><span id="syncIndicatorAnnouncement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span><section id="syncPopover" class="sync-popover" aria-labelledby="syncPopoverHeading" hidden><h2 id="syncPopoverHeading">Local only</h2><p id="syncPopoverDetail">Your library is saved on this device.</p><p id="syncPopoverLastSaved" class="muted" hidden></p><div class="actions"><button id="quickSync" class="primary" type="button" hidden>Sync now</button><button id="syncAccount" type="button">Account &amp; settings</button></div></section></div><button id="accountButton" aria-controls="accountPage" aria-expanded="false">Account</button>
         <button id="backup">Back up</button><button id="restore">Restore</button>
         <button id="add" class="primary">+ Add title</button>
       </div>
     </header>
+    <div id="libraryPage">
+    <div id="syncSetupBanner" class="sync-setup-banner" hidden><span>Your library is still here. Choose how to connect it to Google Drive.</span><button id="reviewSyncSetup" type="button">Review sync setup</button></div>
     <section class="intro">
       <h1>Your watch library</h1>
       <p>Movies, shows, and everything you watch.</p>
     </section>
     <nav id="filters" aria-label="Filter by watch status"></nav>
+    <nav id="list-tabs" aria-label="Custom lists"></nav>
+    <section class="panel" id="list-context" aria-label="List details" hidden></section>
     <div class="layout">
       <section class="panel" aria-labelledby="library-heading">
         <div class="bar"><h2 id="library-heading">Titles</h2><span id="count"></span></div>
@@ -43,7 +48,15 @@
       </section>
       <aside class="panel" id="detail" aria-label="Title details"></aside>
     </div>
-    <footer><span>Saved in this browser</span><span id="notice" role="status"></span></footer>
+    </div>
+    <section id="accountPage" class="account-page" aria-labelledby="accountHeading" hidden>
+<div class="account-heading"><div><p class="eyebrow">YOUR SPACE</p><h1 id="accountHeading" tabindex="-1">Account &amp; settings</h1><p class="muted">Your library, wherever you watch.</p></div><button id="backToLibrary" type="button">← Back to library</button></div>
+<section id="syncSetup" class="panel sync-setup" aria-labelledby="setupHeading" hidden><p class="eyebrow">CONNECT YOUR LIBRARY</p><h2 id="setupHeading">Your library stays here while we check Drive</h2><p id="setupExplanation" class="muted"></p><div class="setup-counts"><div><span>This device</span><strong id="setupLocalCount">0</strong><span>titles</span></div><div><span>Google Drive</span><strong id="setupDriveCount">—</strong><span>titles</span></div></div><p id="setupChoiceStatus" class="muted" role="status"></p><div class="actions"><button id="startSyncLibrary" class="primary" type="button" disabled>Start syncing this library</button><button id="useDriveLibrary" type="button" hidden>Use Drive library</button><button id="checkSetupDrive" type="button">Check Drive</button><button id="setupLater" type="button">Keep using this library</button></div></section><div class="account-grid"><section class="panel account-panel"><div class="account-avatar" aria-hidden="true">Q</div><h2 id="accountName">Keep it local, or take it with you</h2><p id="accountIdentity" class="muted">Signing in is optional. Your local library works as usual.</p><div class="actions"><button id="googleSignIn" class="primary" type="button">Sign in with Google</button><button id="googleSignOut" type="button" hidden>Sign out</button><button id="cancelGoogleSignIn" type="button" hidden>Cancel sign-in</button></div><p id="accountConnection" class="muted" role="status">Checking Google Drive connection…</p><p class="muted">Quiet Screen requests its own hidden app-data folder in Google Drive. It does not request access to your other Drive files.</p></section>
+<section class="panel account-panel"><div class="account-section-heading"><h2>Google Drive sync</h2><span id="syncBadge" class="pill">Local only</span></div><p id="syncStatus" role="status">Sign in to sync your library and view preferences.</p><p id="syncLastSaved" class="muted"></p><label class="toggle account-toggle"><span>Automatic sync</span><input id="autoSync" type="checkbox" role="switch" checked><span class="switch-track" aria-hidden="true"></span></label><p class="muted">Syncs while Quiet Screen is open. Offline changes wait on this device until it reconnects.</p><label class="toggle account-toggle"><span>Treat this connection as metered</span><input id="meteredConnection" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></label><p id="meteredStatus" class="muted">Automatic sync pauses on metered connections. You can always sync manually.</p><div class="actions"><button id="syncNow" class="primary" type="button" disabled>Sync now</button><button id="resetMetered" type="button" hidden>Use detected connection</button></div><div id="copyLocalSection" class="account-note" hidden><p id="copyLocalHint" class="muted"></p><button id="copyLocalLibrary" type="button">Combine local library with this account</button></div><p class="muted">Includes titles, viewing history, episodes, groups, lists, franchise rewatches, and theme. Sign-in credentials stay separate.</p></section>
+<section class="panel account-panel"><h2>Backups &amp; restore</h2><p class="muted">Keep a JSON copy of your current library and view preferences. Works with or without an account.</p><div class="actions"><button id="account-backup" type="button">Back up</button><button id="account-restore" type="button">Restore</button></div><p class="muted">Once connected, a restored backup becomes a change to that account’s library and will sync when enabled.</p><div id="recoverySection" class="account-note" hidden><label for="recoveryChoice">Recovery copies saved before connecting</label><select id="recoveryChoice" aria-label="Choose a recovery copy"></select><button id="downloadRecovery" type="button">Download recovery copy</button><p class="muted">The latest three connection recovery sets stay on this device. Download one to keep it or restore it later.</p></div></section>
+
+<section id="syncConflictsSection" class="panel account-panel account-wide" hidden><h2>Review sync changes</h2><p class="muted">These values changed on more than one device before they synced. Choose which one to keep; both choices remain saved until you decide.</p><div id="syncConflicts"></div></section><section class="panel account-panel account-wide"><h2>About Quiet Screen</h2><p>Copyright 2026 Alex (Ayca Kaygusuz). <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License 2.0</a>.</p></section></div></section>
+    <footer><span id="storageLabel">Saved in this browser</span><span id="notice" role="status"></span></footer>
   </main>
 
   <dialog id="title-dialog" aria-labelledby="title-heading">
@@ -62,6 +75,16 @@
       </div>
       <datalist id="formats"><option>Movie</option><option>TV series</option><option>Miniseries</option><option>Episode</option><option>Documentary</option><option>Short</option><option>Special</option><option>Other</option></datalist>
       <label class="field">IMDb title link or ID <span>Optional</span><input name="imdb" maxlength="300"></label>
+      <label class="field">Series or franchise
+        <select name="groupMode">
+          <option value="auto">Group automatically</option>
+          <option value="manual">Choose a group</option>
+          <option value="none">Keep standalone</option>
+        </select>
+      </label>
+      <label class="field" id="group-name" hidden>Group name<input name="groupName" list="group-options" maxlength="120" placeholder="Choose an existing group or enter a name"></label>
+      <datalist id="group-options"></datalist>
+      <label class="episode-toggle"><input type="checkbox" name="episodic"> Track individual episodes</label>
       <div id="initial">
         <label class="field">Watch status<select name="status"><option>Watchlist</option><option>Watching</option><option>Watched</option></select></label>
         <label class="field" id="initial-date" hidden>Watched on <span>Leave blank if unknown</span><input name="finished" type="date"></label>
@@ -76,6 +99,32 @@
       <label class="field">Started on <span>Optional</span><input name="started" type="date"></label>
       <label class="field">Watched on <span>Leave blank if unknown</span><input name="finished" type="date"></label>
       <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save viewing</button></div>
+    </form>
+  </dialog>
+  <dialog id="list-dialog" aria-labelledby="list-heading">
+    <form id="list-form">
+      <h2 id="list-heading">New list</h2>
+      <label class="field">List name<input name="name" maxlength="120" required></label>
+      <div class="actions end"><button type="button" id="delete-list" hidden>Delete list</button><button type="button" data-close>Cancel</button><button class="primary">Save list</button></div>
+    </form>
+  </dialog>
+  <dialog id="membership-dialog" aria-labelledby="membership-heading">
+    <form id="membership-form">
+      <h2 id="membership-heading">Add to lists</h2>
+      <div id="memberships"></div>
+      <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save lists</button></div>
+    </form>
+  </dialog>
+  <dialog id="episode-dialog" aria-labelledby="episode-heading">
+    <form id="episode-form">
+      <h2 id="episode-heading">Log episode</h2>
+      <div class="columns">
+        <label class="field">Season<input name="season" type="number" min="0" max="9999" step="1" required></label>
+        <label class="field">Episode<input name="episode" type="number" min="1" max="99999" step="1" required></label>
+      </div>
+      <label class="field">Episode title <span>Optional</span><input name="name" maxlength="300"></label>
+      <label class="field">Watched on <span>Leave blank if unknown</span><input name="date" type="date"></label>
+      <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save episode</button></div>
     </form>
   </dialog>
   <input id="backup-file" type="file" accept=".json,application/json" hidden>

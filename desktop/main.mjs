@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Menu, protocol, session, shell } from 'electron'
+import { createGoogleAccount } from './google-account.mjs'
+import { app, BrowserWindow, Menu, protocol, safeStorage, session, shell } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { serveApp } from '../app-response.mjs'
@@ -15,9 +16,9 @@ protocol.registerSchemesAsPrivileged([{
 
 let window
 
-function openIMDb(value) {
+function openExternalLink(value) {
   const url = new URL(value)
-  if (url.origin === 'https://www.imdb.com' && !url.username && !url.password) {
+  if (!url.username && !url.password && (url.origin === 'https://www.imdb.com' || url.href === 'https://www.apache.org/licenses/LICENSE-2.0')) {
     void shell.openExternal(url.href).catch(console.error)
   }
 }
@@ -29,13 +30,13 @@ function createWindow() {
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   })
   window.webContents.setWindowOpenHandler(({ url }) => {
-    openIMDb(url)
+    openExternalLink(url)
     return { action: 'deny' }
   })
   window.webContents.on('will-navigate', (event, url) => {
     if (url === appURL) return
     event.preventDefault()
-    openIMDb(url)
+    openExternalLink(url)
   })
   window.once('ready-to-show', () => window?.show())
   window.on('closed', () => { window = null })
@@ -53,9 +54,25 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit())
   app.whenReady().then(() => {
     app.setAppUserModelId('com.quietscreen.desktop')
-    protocol.handle(scheme, request => {
+    const account = createGoogleAccount({
+      profile, safeStorage, openExternal: url => shell.openExternal(url),
+      defaultClientId: app.isPackaged ? '' : process.env.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID,
+      defaultClientSecret: app.isPackaged ? '' : process.env.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_SECRET,
+    })
+    app.on('before-quit', account.dispose)
+    protocol.handle(scheme, async request => {
       const url = new URL(request.url)
       if (url.host !== 'app' || url.username || url.password) return new Response(null, { status: 403 })
+      if (url.pathname.startsWith('/api/account/')) {
+        const origin = request.headers.get('Origin')
+        if ((origin && origin !== appURL.slice(0, -1) && origin !== 'null') ||
+            (request.method === 'POST' && request.headers.get('X-Quiet-Screen-Account') !== '1')) {
+          return new Response(null, { status: 403 })
+        }
+        const response = await account.handle(request)
+        response.headers.set('Cache-Control', 'no-store')
+        return response
+      }
       return serveApp(url, request.method)
     })
     const profileSession = session.defaultSession

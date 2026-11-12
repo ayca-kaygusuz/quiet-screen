@@ -6,6 +6,9 @@ const assets = new Map([
   ['/style.css', ['style.css', 'text/css']],
   ['/app.mjs', ['app.mjs', 'text/javascript']],
   ['/library.mjs', ['library.mjs', 'text/javascript']],
+  ['/sync/sync-core.js', ['sync/sync-core.js', 'text/javascript']],
+  ['/sync/account.js', ['sync/account.js', 'text/javascript']],
+  ['/license.txt', ['LICENSE', 'text/plain']],
 ])
 
 const formats = new Map(Object.entries({

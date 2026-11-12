@@ -1,0 +1,13 @@
+Quiet Screen
+Copyright 2026 Alex (Ayca Kaygusuz)
+
+Original project created by Alex (Ayca Kaygusuz).
+Official source: https://github.com/ayca-kaygusuz/quiet-screen
+
+Quiet Screen is licensed under the Apache License, Version 2.0.
+See LICENSE. Google Drive sync components and interface patterns were
+adapted from Quiet Shelf, also licensed under Apache 2.0.
+https://github.com/ayca-kaygusuz/quiet-shelf-public
+
+The Windows package includes Electron and Chromium. Their licenses are
+included in the installed application directory.

@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { access, cp, mkdir, mkdtemp, readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { dirname, join, relative, resolve, sep } from 'node:path'
@@ -26,9 +26,13 @@ await cp(runtime, appDir, {
 })
 await rename(join(appDir, 'electron.exe'), join(appDir, 'Quiet Screen.exe'))
 await mkdir(join(payload, 'desktop'), { recursive: true })
-for (const name of ['package.json', 'index.html', 'style.css', 'app.mjs', 'app-response.mjs', 'library.mjs', 'desktop/main.mjs']) {
-  await cp(join(project, name), join(payload, name))
+for (const name of ['package.json', 'index.html', 'style.css', 'app.mjs', 'app-response.mjs', 'library.mjs', 'LICENSE', 'NOTICE', 'sync', 'desktop/main.mjs', 'desktop/google-account.mjs']) {
+  await cp(join(project, name), join(payload, name), { recursive: true })
 }
+
+const config = 'desktop/google-client.generated.json'
+const configured = await access(join(project, config)).then(() => true, () => false)
+if (configured) await cp(join(project, config), join(payload, config))
 
 async function uninstallCommands(dir) {
   const entries = await readdir(dir, { withFileTypes: true })
