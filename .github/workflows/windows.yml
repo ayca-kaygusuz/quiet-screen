@@ -2,6 +2,11 @@ name: Windows build and Google configuration
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the Windows installer on GitHub Releases
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,11 +32,29 @@ jobs:
           node scripts/configure-desktop.mjs
       - name: Install Windows build tools
         run: |
-          npm install --no-save --package-lock=false electron@45.2.3
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $ErrorActionPreference = 'Stop'
+          $archive = 'electron-v45.2.3-win32-x64.zip'
+          $release = 'https://github.com/electron/electron/releases/download/v45.2.3'
+          $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron'
+          $zip = Join-Path $env:RUNNER_TEMP $archive
+          $sums = Join-Path $env:RUNNER_TEMP 'electron-sha256.txt'
+          Invoke-WebRequest "$release/$archive" -OutFile $zip
+          Invoke-WebRequest "$release/SHASUMS256.txt" -OutFile $sums
+          $line = Get-Content $sums | Where-Object { $_ -match ('\s+\*?' + [regex]::Escape($archive) + '$') }
+          $expected = ($line -split '\s+')[0]
+          if (!$expected -or (Get-FileHash $zip -Algorithm SHA256).Hash -ne $expected) {
+            throw 'Electron archive checksum mismatch.'
+          }
+          Expand-Archive -LiteralPath $zip -DestinationPath $runtime
           choco install nsis --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build installer
-        run: node desktop/build.mjs node_modules/electron/dist "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
+        run: |
+          $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron'
+          $compiler = @("${env:ProgramFiles(x86)}/NSIS/makensis.exe", "$env:ProgramFiles/NSIS/makensis.exe") |
+            Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (!$compiler) { throw 'NSIS compiler was not installed.' }
+          node desktop/build.mjs $runtime $compiler
       - uses: actions/upload-artifact@v4
         with:
           name: quiet-screen-windows-x64
@@ -39,3 +62,25 @@ jobs:
             work/windows/Quiet-Screen-Setup-*-x64.exe
             work/windows/SHA256SUMS.txt
           if-no-files-found: error
+
+  release:
+    if: inputs.publish
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: quiet-screen-windows-x64
+          path: release
+      - name: Publish Windows release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          installer="Quiet-Screen-Setup-${version}-x64.exe"
+          (cd release && sha256sum --check SHA256SUMS.txt)
+          gh release create "v${version}" "release/$installer" release/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" --title "Quiet Screen v${version}" --generate-notes
