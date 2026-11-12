@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quiet Screen</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.mjs"></script>
+</head>
+<body>
+  <main>
+    <header class="bar">
+      <div class="brand"><span aria-hidden="true">▷</span> Quiet Screen</div>
+      <label class="theme-control" for="theme">Theme
+        <select id="theme">
+          <optgroup label="Dark">
+            <option value="ink">Dark Ink</option>
+            <option value="tide">Midnight Tide</option>
+            <option value="rosewood">Rosewood</option>
+          </optgroup>
+          <optgroup label="Light">
+            <option value="sage">Paper Grove</option>
+            <option value="porcelain">Porcelain</option>
+            <option value="apricot">Apricot Hour</option>
+          </optgroup>
+        </select>
+      </label>
+      <div class="actions">
+        <button id="backup">Back up</button><button id="restore">Restore</button>
+        <button id="add" class="primary">+ Add title</button>
+      </div>
+    </header>
+    <section class="intro">
+      <h1>Your watch library</h1>
+      <p>Movies, shows, and everything you watch.</p>
+    </section>
+    <nav id="filters" aria-label="Filter by watch status"></nav>
+    <div class="layout">
+      <section class="panel" aria-labelledby="library-heading">
+        <div class="bar"><h2 id="library-heading">Titles</h2><span id="count"></span></div>
+        <label class="field">Search your library<input id="library-search" type="search" placeholder="Title or format"></label>
+        <ul id="titles"></ul>
+      </section>
+      <aside class="panel" id="detail" aria-label="Title details"></aside>
+    </div>
+    <footer><span>Saved in this browser</span><span id="notice" role="status"></span></footer>
+  </main>
+
+  <dialog id="title-dialog" aria-labelledby="title-heading">
+    <form id="title-form">
+      <h2 id="title-heading">Add title</h2>
+      <section id="lookup" aria-label="IMDb lookup">
+        <label class="field">Find on IMDb<input id="query" type="search" maxlength="150" placeholder="Title or IMDb link"></label>
+        <div class="actions"><button type="button" id="find">Search IMDb</button><a id="imdb-search" target="_blank" rel="noopener noreferrer">Open IMDb ↗</a></div>
+        <p id="lookup-status" role="status"></p>
+        <ul id="results"></ul>
+      </section>
+      <label class="field">Title<input name="title" required maxlength="300"></label>
+      <div class="columns">
+        <label class="field">Format<input name="format" list="formats" required maxlength="50" value="Movie"></label>
+        <label class="field">Release year <span>Optional</span><input name="year" type="number" min="1870" max="9999"></label>
+      </div>
+      <datalist id="formats"><option>Movie</option><option>TV series</option><option>Miniseries</option><option>Episode</option><option>Documentary</option><option>Short</option><option>Special</option><option>Other</option></datalist>
+      <label class="field">IMDb title link or ID <span>Optional</span><input name="imdb" maxlength="300"></label>
+      <div id="initial">
+        <label class="field">Watch status<select name="status"><option>Watchlist</option><option>Watching</option><option>Watched</option></select></label>
+        <label class="field" id="initial-date" hidden>Watched on <span>Leave blank if unknown</span><input name="finished" type="date"></label>
+      </div>
+      <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save title</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="view-dialog" aria-labelledby="view-heading">
+    <form id="view-form">
+      <h2 id="view-heading"></h2>
+      <label class="field">Started on <span>Optional</span><input name="started" type="date"></label>
+      <label class="field">Watched on <span>Leave blank if unknown</span><input name="finished" type="date"></label>
+      <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save viewing</button></div>
+    </form>
+  </dialog>
+  <input id="backup-file" type="file" accept=".json,application/json" hidden>
+</body>
+</html>

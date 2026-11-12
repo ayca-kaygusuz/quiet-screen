@@ -1,0 +1,9 @@
+{
+  "name": "quiet-screen",
+  "version": "0.1.0",
+  "productName": "Quiet Screen",
+  "private": true,
+  "main": "desktop/main.mjs",
+  "scripts": { "start": "node server.mjs", "build:windows": "node desktop/build.mjs" },
+  "engines": { "node": ">=24" }
+}
