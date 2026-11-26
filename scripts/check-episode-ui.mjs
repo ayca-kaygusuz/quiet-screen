@@ -85,6 +85,17 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
   assert.equal(await run("QuietScreenApp.snapshot().library[0].seasons[0].count"),10)
   assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.length"),18)
   assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.every(view=>view.date===null)"),true)
+  await run(`
+    const snapshot=QuietScreenApp.snapshot();
+    const base=snapshot.library[0];
+    QuietScreenApp.apply({...snapshot,library:[
+      {...base,id:'steven',title:'Steven Universe',imdb:'',episodes:[],seasons:[],history:[],group:{mode:'auto',name:''}},
+      {...base,id:'future',title:'Steven Universe Future',imdb:'',episodes:[],seasons:[],history:[],group:{mode:'auto',name:''}}
+    ]});
+  `)
+  assert.equal(await run("document.querySelector('#titles .group-toggle').textContent"),'Steven Universe')
+  assert.equal(await run("document.querySelectorAll('#titles .group-heading').length"),1)
+  assert.match(await run("document.querySelector('#titles').textContent"),/Steven Universe Future/)
   done()
  }catch(e){done(e)}
 }))

@@ -97,12 +97,33 @@ function inferredGroup(title) {
   return name.length <= 120 ? name : ''
 }
 
+function relatedGroupName(name, names) {
+  const qualifiers = /^(?:future|returns|origins|legacy|revival|reunion|the (?:movie|film|series|animated series)|a new (?:generation|era))(?:\s|$)/i
+  // A sequel qualifier only counts when its complete base title is present.
+  // Prefer the closest base, so nested franchises keep their own groups.
+  let current = name
+  for (;;) {
+    const key = groupKey(current)
+    const base = names.filter(candidate => {
+      const baseKey = groupKey(candidate)
+      if (baseKey === key || baseKey.split(' ').length < 2 || baseKey.length < 8) return false
+      if (!key.startsWith(baseKey + ' ')) return false
+      return qualifiers.test(key.slice(baseKey.length).trim())
+    }).sort((a, b) => b.length - a.length)[0]
+    if (!base) return current
+    current = base
+  }
+}
+
 export function seriesGroups(library) {
+  const names = library.filter(title => (title.group?.mode ?? 'auto') !== 'none')
+    .map(title => title.group?.mode === 'manual' ? title.group.name.trim() : inferredGroup(title.title))
+    .filter(Boolean)
   const candidates = new Map()
   for (const title of library) {
     const mode = title.group?.mode ?? 'auto'
     if (mode === 'none') continue
-    const name = mode === 'manual' ? title.group.name.trim() : inferredGroup(title.title)
+    const name = mode === 'manual' ? title.group.name.trim() : relatedGroupName(inferredGroup(title.title), names)
     if (!name) continue
     const key = groupKey(name)
     const group = candidates.get(key) ?? { key, name, members: [], explicit: false }
