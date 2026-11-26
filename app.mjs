@@ -1149,7 +1149,7 @@ $('check-series-releases').onclick = () => {
   $('series-releases-dialog').showModal()
 }
 $('include-ended-series').onchange = seriesCheckSummary
-$('series-releases-dialog').addEventListener('close',()=>{stopSeriesCheck=true})
+$('series-releases-dialog').addEventListener('close',()=>{if(!$('series-releases-dialog').open)stopSeriesCheck=true})
 $('show-new-episodes').onclick = () => {
   $('series-releases-dialog').close()
   filter = 'New episodes'
@@ -1490,6 +1490,7 @@ $('franchise-lookup').onclick = () => openFranchiseLookup()
 $('franchise-scope').onchange = renderFranchiseScope
 $('cancel-franchise-lookup').onclick = () => franchiseRequest?.abort()
 $('franchise-dialog').addEventListener('close', () => {
+  if ($('franchise-dialog').open) return
   franchiseEpoch++
   franchiseRequest?.abort()
 })
