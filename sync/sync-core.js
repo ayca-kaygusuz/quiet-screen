@@ -2,7 +2,7 @@ import {validFranchiseCheck} from '../franchises.mjs';
 // Copyright 2026 Alex (Ayca Kaygusuz)
 // SPDX-License-Identifier: Apache-2.0
 
-import { validPoster, validReleaseInfo, validCompletion, validSeasons, validEpisode, validGroup, validLists } from '../library.mjs';
+import { validActive, validPoster, validReleaseInfo, validCompletion, validSeasons, validEpisode, validGroup, validLists } from '../library.mjs';
 
 /* Shared by the browser, Windows app and Drive adapter. No credentials belong here. */
 (function(root){
@@ -25,8 +25,7 @@ import { validPoster, validReleaseInfo, validCompletion, validSeasons, validEpis
   if(p[0]==='p')return v===null||['ink','sage','tide','rosewood','porcelain','apricot'].includes(v);
   if(p[2]==='present')return typeof v==='boolean';
   if(v===null)return true;
-  if(p[2]==='active')return plain(v)&&(v.started===null||calendarDate(v.started))&&
-   (v.id===undefined||typeof v.id==='string'&&v.id.length<=100);
+  if(p[2]==='active')return validActive(v);
   if(p[2]==='episode')return v.id===p[3]&&validEpisode(v);
   if(p[3]==='franchiseCheck')return validFranchiseCheck(v);
   if(p[3]==='poster')return validPoster(v);

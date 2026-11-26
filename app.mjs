@@ -1,6 +1,6 @@
 import {franchiseChecked, franchiseTargets, franchiseSuggestions, setBundle, unbundle, validFranchiseCheck} from './franchises.mjs'
 import './sync/sync-core.js'
-import { undoDuplicateAddition, seriesReleaseTargets, validPoster, logSeasonRange, releaseProgress, validReleaseInfo, duplicateAddition, completeSeriesEpisodes, clearEpisodeViewings, episodeProgress, validSeasons, librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
+import { reconcileEpisodeActivity, recordEpisodeViewing, parsePosition, formatPosition, savePlayback, undoDuplicateAddition, seriesReleaseTargets, validPoster, logSeasonRange, releaseProgress, validReleaseInfo, duplicateAddition, completeSeriesEpisodes, clearEpisodeViewings, episodeProgress, validSeasons, librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
 
 const $ = id => document.getElementById(id)
 const titleForm = $('title-form')
@@ -387,6 +387,13 @@ function renderDetail(title) {
     quickActions.append(button('Open episodes', () => {detailTab='episodes';renderDetail(title)}),button('Log seasons…', () => openBulkEpisodes(title)))
     section.append(quickActions)
     detail.append(section)
+  } else if (title.active || !title.history.length) {
+    const section = node('section', '', 'episode-overview')
+    section.append(node('h3', 'Your place'),node('p',title.active?.position !== null && title.active?.position !== undefined
+      ? 'Resume at ' + formatPosition(title.active.position) : 'Save your place between sittings.'))
+    if (title.active?.notes) section.append(node('p',title.active.notes,'playback-notes'))
+    section.append(button(title.active ? 'Save place & notes' : 'Start & save place', () => openPlayback(title)))
+    detail.append(section)
   }
   const summary = title.history.length + (title.history.length === 1 ? ' completed viewing' : ' completed viewings')
   detail.append(node('p', summary, 'viewing-summary'))
@@ -398,11 +405,35 @@ function renderViewingHistory(detail, title) {
   title.history.slice().reverse().forEach((view, reverseIndex) => {
     const info = node('div', view.finished ? 'Watched ' + formatDate(view.finished) : 'Watched · date unknown')
     if (view.started) info.append(node('span', 'Started ' + formatDate(view.started)))
+    if (view.position !== null && view.position !== undefined) info.append(node('span', 'Last saved position ' + formatPosition(view.position)))
+    if (view.notes) info.append(node('p',view.notes,'playback-notes'))
     const index = title.history.length - 1 - reverseIndex
     history.append(listItem(info, button('Edit dates', () => openViewing(title, 'edit', index))))
   })
   if (!title.history.length) history.append(listItem('No completed viewings yet.'))
   detail.append(history)
+}
+
+const playbackForm = $('playback-form')
+let playbackTitle
+function openPlayback(title) {
+  playbackTitle = {id:title.id,run:title.active?.id ?? null}
+  $('playback-heading').textContent = 'Save your place · ' + title.title
+  playbackForm.elements.position.value = formatPosition(title.active?.position)
+  playbackForm.elements.position.setCustomValidity('')
+  playbackForm.elements.notes.value = title.active?.notes ?? ''
+  $('playback-dialog').showModal()
+}
+playbackForm.oninput = () => playbackForm.elements.position.setCustomValidity('')
+playbackForm.onsubmit = event => {
+  event.preventDefault()
+  const title = library.find(title=>title.id===playbackTitle.id)
+  if (!title || (title.active?.id ?? null) !== playbackTitle.run) return invalid(playbackForm.elements.position,'This viewing has changed. Close and reopen this form.')
+  try {
+    const position = parsePosition(playbackForm.elements.position.value)
+    const next = savePlayback(title,position,playbackForm.elements.notes.value)
+    if (update(next,'Your place and notes are saved.')) $('playback-dialog').close()
+  } catch(error) { invalid(playbackForm.elements.position,error.message) }
 }
 
 function existingBundleIdentity(name) {
@@ -719,7 +750,7 @@ function viewingId() {
 }
 
 function normalizeTitles(titles) {
-  return titles.map((title, index) => completeSeriesEpisodes({
+  return titles.map((title, index) => reconcileEpisodeActivity(completeSeriesEpisodes({
     ...title,
     order: title.order ?? 'legacy-' + String(index).padStart(8, '0'),
     group: title.group ?? { mode: 'auto', name: '' },
@@ -730,7 +761,7 @@ function normalizeTitles(titles) {
       ...view,
       id: view.id ?? 'legacy-' + String(index).padStart(8, '0'),
     })),
-  }))
+  })))
 }
 
 function validateDocument({ library: titles, preferences = {}, lists: syncedLists = [] }) {
@@ -831,8 +862,8 @@ function saveEpisode(title, values, existing) {
     invalid(episodeFields.episode, 'This season has ' + season.count + ' episodes. Update its count if needed.')
     return false
   }
-  const episodes = existing ? title.episodes.map(item => item.id === view.id ? view : item) : [...title.episodes, view]
-  return update({ ...title, episodes }, 'Episode viewing saved.')
+  const next = recordEpisodeViewing(title,view,existing?.id)
+  return update(next, 'Episode viewing saved · ' + status(next) + '.')
 }
 
 episodeForm.oninput = () => episodeFields.episode.setCustomValidity('')

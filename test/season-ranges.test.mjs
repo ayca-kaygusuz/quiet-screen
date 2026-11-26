@@ -12,7 +12,10 @@ test('a season range logs missing episodes without ending an active viewing or i
  assert.ok(validLibrary([result.title]))
  assert.equal(logSeasonRange(result.title,1,6).added,0)
  const again=start({...result.title,active:null},'2026-11-26')
- assert.equal(logSeasonRange(again,1,1,'2026-11-26').added,2)
+ assert.equal(logSeasonRange(again,1,1,'2026-11-26').added,0)
+ const done=logSeasonRange(result.title,7,7).title
+ assert.equal(done.history.length,1)
+ assert.equal(logSeasonRange(start(done),1,1,'2026-11-26').added,2)
  assert.equal(title.episodes.length,0)
 })
 

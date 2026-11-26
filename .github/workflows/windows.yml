@@ -78,7 +78,7 @@ jobs:
       - name: Test episode releases and Google reconnect in Electron
         run: |
           $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron/electron.exe'
-          foreach ($name in @('releases','reconnect','library')) {
+          foreach ($name in @('releases','reconnect','library','progress')) {
             $test = (Resolve-Path "scripts/check-$name-ui.mjs").Path
             $process = Start-Process -FilePath $runtime -ArgumentList ('"' + $test + '"') -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput ui-output.txt -RedirectStandardError ui-error.txt
             Get-Content ui-output.txt

@@ -128,6 +128,15 @@
     <progress id="update-progress" max="100" aria-label="Update progress" hidden></progress>
     <button id="card-update" type="button" class="primary" hidden></button>
   </section>
+  <dialog id="playback-dialog" aria-labelledby="playback-heading">
+    <form id="playback-form">
+      <h2 id="playback-heading">Save your place</h2>
+      <label class="field">Resume timestamp <span>Optional · MM:SS or HH:MM:SS</span><input name="position" type="text" maxlength="12" placeholder="01:20:15" autocomplete="off"></label>
+      <label class="field">Notes <span>Optional</span><textarea name="notes" rows="4" maxlength="10000" placeholder="A reminder for when you return…"></textarea></label>
+      <p class="field-note">Your place and notes are saved with this viewing and kept in its history when you finish.</p>
+      <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save place</button></div>
+    </form>
+  </dialog>
   <dialog id="series-releases-dialog" aria-labelledby="series-releases-heading">
     <h2 id="series-releases-heading">Check series for new releases</h2>
     <p>Checks series in your library by IMDb ID. Movies and other standalone formats are excluded.</p>

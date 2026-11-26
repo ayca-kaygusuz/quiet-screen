@@ -30,8 +30,69 @@ export function status(title) {
   return title.history.length ? 'Watched' : 'Watchlist'
 }
 
-export function start(title, date = today()) {
-  return title.active ? title : { ...title, active: { started: date, id: crypto.randomUUID() } }
+export function start(title, date = today(), run = crypto.randomUUID()) {
+  if(title.active)return title
+  const resume=!title.history?.length&&title.episodes?.length
+  const dates=resume?title.episodes.map(e=>e.date).filter(Boolean).sort():[]
+  return {...title,active:{started:resume?dates[0]??null:date,id:run},
+    ...(resume?{episodes:title.episodes.map(e=>({...e,run}))}:{})}
+}
+
+export function reconcileEpisodeActivity(title, date=null) {
+  if(!(title.episodic??isEpisodic(title.format))||!title.episodes?.length)return title
+  if(!title.active&&!title.history.length)title=start(title,date,'first-viewing')
+  if(!title.active)return title
+  const progress=episodeProgress(title)
+  if(!progress.some(e=>e.season>0))return title
+  const releases=releaseProgress(title)
+  const finished=releases?releases.released.length===0&&releases.unknown.length===0:
+    title.seasons.some(s=>s.season>0)&&!nextEpisode(progress,title.seasons)
+  if(!finished)return title
+  const id='episodes-'+String(title.active.id??'first-viewing').slice(0,60)
+  if(title.history.some(view=>view.id===id))return {...title,active:null}
+  const finishedOn=date??progress.at(-1)?.date??null
+  const started=title.active.started&&finishedOn&&title.active.started>finishedOn
+    ? progress.map(e=>e.date).filter(Boolean).sort()[0]??null : title.active.started
+  return saveViewing(title,'finish',{id,started,finished:finishedOn})
+}
+
+export function recordEpisodeViewing(title, view, existingId=null) {
+  if(!title.active&&!title.history.length)title=start(title,view.date)
+  const existing=existingId&&title.episodes.find(e=>e.id===existingId)
+  const next={...view,run:existing?existing.run??null:title.active?.id??null}
+  if(!validEpisode(next))throw Error('Invalid episode viewing.')
+  const episodes=existing?title.episodes.map(e=>e.id===existingId?next:e):[...title.episodes,next]
+  return reconcileEpisodeActivity({...title,episodes},view.date)
+}
+
+export function validPlayback(value) {
+  return (value.position===undefined||value.position===null||Number.isInteger(value.position)&&value.position>=0&&value.position<=604800)&&
+    (value.notes===undefined||typeof value.notes==='string'&&value.notes.length<=10000)
+}
+
+export function validActive(value) {
+  return !!value&&validDate(value.started)&&(value.id===undefined||typeof value.id==='string'&&value.id.length<=100)&&validPlayback(value)
+}
+
+export function parsePosition(value) {
+  if(!value.trim())return null
+  if(!/^\d{1,3}:\d{2}(?::\d{2})?$/.test(value.trim()))throw Error('Use MM:SS or HH:MM:SS, for example 45:30 or 01:20:15.')
+  const parts=value.trim().split(':').map(Number)
+  if(parts.at(-1)>59||parts.length===3&&parts[1]>59)throw Error('Minutes and seconds must be below 60 in HH:MM:SS.')
+  const seconds=parts.reduce((total,n)=>total*60+n,0)
+  if(seconds>604800)throw Error('Choose a timestamp within 168 hours.')
+  return seconds
+}
+
+export function formatPosition(seconds) {
+  if(seconds===null||seconds===undefined)return ''
+  return [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].map(n=>String(n).padStart(2,'0')).join(':')
+}
+
+export function savePlayback(title, position, notes) {
+  if(!validPlayback({position,notes}))throw Error('Invalid saved position or notes.')
+  const next=start(title)
+  return {...next,active:{...next.active,position,notes}}
 }
 
 // Duplicate additions change viewing state, never replace metadata or history.
@@ -65,7 +126,9 @@ export function undoDuplicateAddition(before, saved, current) {
 export function saveViewing(title, mode, viewing, index) {
   const history = [...title.history]
   if (mode === 'edit') history[index] = { ...history[index], ...viewing }
-  else history.push({ ...viewing, ...(mode === 'finish' && title.active?.id ? { run: title.active.id } : {}) })
+  else history.push({ ...viewing, ...(mode === 'finish' && title.active?.id ? { run: title.active.id } : {}),
+    ...(mode==='finish'&&title.active?.position!==undefined?{position:title.active.position}:{}),
+    ...(mode==='finish'&&title.active?.notes!==undefined?{notes:title.active.notes}:{}) })
   return completeSeriesEpisodes({ ...title, history, active: mode === 'finish' ? null : title.active })
 }
 
@@ -122,7 +185,7 @@ export function validLibrary(titles) {
       (title.episodic === undefined || typeof title.episodic === 'boolean') &&
       (title.episodes === undefined || validEpisodes(title.episodes)) &&
       (title.seasons === undefined || validSeasons(title.seasons)) &&
-      (title.active === null || !!title.active && validDate(title.active.started) && (title.active.id === undefined || typeof title.active.id === 'string' && title.active.id.length <= 100)) &&
+      (title.active === null || validActive(title.active)) &&
       Array.isArray(title.history) && new Set(title.history.map((view, index) => view?.id ?? 'legacy-' + String(index).padStart(8, '0'))).size === title.history.length && title.history.every(view =>
         !!view && (view.id === undefined || typeof view.id === 'string' && /^[a-zA-Z0-9_-]{1,200}$/.test(view.id)) && validDate(view.started) && validDate(view.finished) &&
         (!view.started || !view.finished || view.started <= view.finished) && validCompletion(view))
@@ -279,7 +342,7 @@ export function logSeasonRange(title, from, through, date=null) {
     }
     added.push({id:crypto.randomUUID(),season,episode,name:releases?.get(key)?.name??'',date,run:title.active?.id??null})
   }
-  return {title:{...title,episodes:[...title.episodes,...added]},added:added.length,skipped}
+  return {title:reconcileEpisodeActivity({...title,episodes:[...title.episodes,...added]},date),added:added.length,skipped}
 }
 
 const titleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
@@ -324,7 +387,7 @@ export function viewingInsights(titles, now = new Date()) {
 }
 
 export function validCompletion(view) {
-  return (view.run === undefined || typeof view.run === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(view.run)) &&
+  return validPlayback(view) && (view.run === undefined || typeof view.run === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(view.run)) &&
     (view.coverage === undefined || validSeasons(view.coverage))
 }
 
