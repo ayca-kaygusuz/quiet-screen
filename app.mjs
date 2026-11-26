@@ -1,3 +1,4 @@
+import {franchiseChecked, franchiseTargets, franchiseSuggestions, setBundle, unbundle, validFranchiseCheck} from './franchises.mjs'
 import './sync/sync-core.js'
 import { completeSeriesEpisodes, clearEpisodeViewings, episodeProgress, validSeasons, librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
 
@@ -181,6 +182,9 @@ function render() {
       toggle.setAttribute('aria-controls', groupId)
       toggle.setAttribute('aria-expanded', String(!collapsedGroups.has(group.key)))
       groupHeader.append(toggle)
+      groupHeader.append(button('Manage bundle', () => openBundle(group)),
+        button(group.members.every(id => franchiseChecked(library.find(title => title.id === id))) ? 'Recheck connections' : 'Check connections',
+          () => openFranchiseLookup(group.members)))
       if (group.members.length > 1) groupHeader.append(button('Start group rewatch', () => beginGroupRewatch(group)))
       groupList = node('ul')
       groupList.id = groupId
@@ -247,6 +251,7 @@ function renderDetail(title) {
       () => update(start(title), 'Start date saved.'), 'primary'))
   }
   actions.append(button('Log past viewing', () => openViewing(title, 'past')), button('Edit title', () => openTitle(title)), button('Add to lists', () => openMemberships(title)))
+  actions.append(button(franchiseChecked(title) ? 'Recheck franchise' : 'Check franchise', () => openFranchiseLookup([title.id])))
   detail.append(actions)
   if (title.episodic || title.episodes.length) detail.append(episodeControls(title))
   const summary = title.history.length + (title.history.length === 1 ? ' completed viewing' : ' completed viewings')
@@ -274,6 +279,13 @@ function renderViewingHistory(detail, title) {
   })
   if (!title.history.length) history.append(listItem('No completed viewings yet.'))
   detail.append(history)
+}
+
+function existingBundleIdentity(name) {
+  if (editing?.group?.mode === 'manual' && editing.group.name === name && editing.group.id) return {id:editing.group.id}
+  const ids = new Set(library.filter(title => title.group?.mode === 'manual' && title.group.name === name && title.group.id)
+    .map(title => title.group.id))
+  return ids.size === 1 ? {id:[...ids][0]} : {}
 }
 
 function openTitle(title) {
@@ -327,7 +339,9 @@ titleForm.onsubmit = event => {
     id: editing?.id ?? crypto.randomUUID(),
     order: editing?.order ?? viewingId(),
     title, format: fields.format.value.trim() || 'Other', year: fields.year.value ? String(fields.year.valueAsNumber) : '', imdb,
-    group: { mode: fields.groupMode.value, name: fields.groupMode.value === 'manual' ? fields.groupName.value.trim() : '' },
+    ...(editing?.franchiseCheck?.imdb === imdb ? {franchiseCheck:editing.franchiseCheck} : {}),
+    group: { mode: fields.groupMode.value, name: fields.groupMode.value === 'manual' ? fields.groupName.value.trim() : '',
+      ...(fields.groupMode.value === 'manual' ? existingBundleIdentity(fields.groupName.value.trim()) : {}) },
     episodic: fields.episodic.checked,
     episodes: editing?.episodes ?? [],
     seasons: editing?.seasons ?? [],
@@ -976,6 +990,204 @@ async function fetchTitleEpisodes(id, refresh = false) {
   } catch {
     episodeLookups.set(id, {phase:'failed'})
     if (selected) renderDetail(library.find(title => title.id === selected))
+  }
+}
+
+
+let franchiseMembers = null
+let franchiseRequest = null
+let franchiseBusy = false
+let franchiseEpoch = 0
+let franchiseProposals = []
+const bundleForm = $('bundle-form')
+let originalBundleMembers = []
+let bundleIdentity
+
+function openBundle(group) {
+  originalBundleMembers = group ? [...group.members] : []
+  bundleIdentity = group?.id ?? crypto.randomUUID()
+  bundleForm.elements.name.value = group?.name ?? ''
+  bundleForm.elements.name.setCustomValidity('')
+  $('bundle-heading').textContent = group ? 'Manage bundle' : 'Bundle titles'
+  $('bundle-message').textContent = ''
+  $('unbundle-titles').hidden = !group
+  const selected = new Set(originalBundleMembers)
+  $('bundle-members').replaceChildren(...library.map(title => {
+    const label = node('label', '', 'episode-toggle')
+    const input = node('input')
+    input.type = 'checkbox'
+    input.value = title.id
+    input.checked = selected.has(title.id)
+    label.append(input, ' ' + title.title)
+    return label
+  }))
+  $('bundle-dialog').showModal()
+}
+
+bundleForm.elements.name.oninput = () => bundleForm.elements.name.setCustomValidity('')
+bundleForm.onsubmit = event => {
+  event.preventDefault()
+  const name = bundleForm.elements.name.value.trim()
+  if (!name) return invalid(bundleForm.elements.name, 'Enter a bundle name.')
+  const members = [...$('bundle-members').querySelectorAll('input:checked')].map(input => input.value)
+  if (!members.length) {
+    $('bundle-message').textContent = 'Select at least one title, or use Unbundle all.'
+    return
+  }
+  if (commit(setBundle(library, members, name, originalBundleMembers, bundleIdentity), selected, 'Bundle saved.')) $('bundle-dialog').close()
+}
+$('unbundle-titles').onclick = () => {
+  if (confirm('Unbundle these titles? Each title will become standalone.') &&
+      commit(unbundle(library, originalBundleMembers), selected, 'Titles unbundled.')) $('bundle-dialog').close()
+}
+$('bundle-titles').onclick = () => openBundle()
+
+function lookupScope() {
+  return franchiseMembers ? library.filter(title => franchiseMembers.includes(title.id)) : library
+}
+
+function renderFranchiseScope() {
+  const scoped = lookupScope()
+  const checked = scoped.filter(franchiseChecked).length
+  const targets = franchiseTargets(scoped, $('franchise-scope').value === 'all')
+  const missing = scoped.filter(title => !/^tt\d{7,}$/.test(title.imdb)).length
+  $('franchise-scope-summary').textContent = targets.length + ' titles to look up · ' + checked +
+    ' already checked' + (missing ? ' · ' + missing + ' need an IMDb link' : '')
+  $('run-franchise-lookup').disabled = franchiseBusy || !targets.length
+  $('franchise-scope').disabled = franchiseBusy
+  $('cancel-franchise-lookup').hidden = !franchiseBusy
+}
+
+function sourceLink(label, id) {
+  const source = node('a', label)
+  source.href = 'https://www.wikidata.org/wiki/' + id
+  source.target = '_blank'
+  source.rel = 'noopener noreferrer'
+  return source
+}
+
+function renderFranchiseResults() {
+  const scoped = lookupScope()
+  const scopeIds = new Set(scoped.map(title => title.id))
+  franchiseProposals = franchiseSuggestions(library).filter(group => group.members.some(id => scopeIds.has(id)))
+  const results = []
+  for (const [index, proposal] of franchiseProposals.entries()) {
+    const card = node('section', '', 'franchise-proposal')
+    const label = node('label', '', 'episode-toggle')
+    const checkbox = node('input')
+    checkbox.type = 'checkbox'
+    checkbox.dataset.proposal = String(index)
+    label.append(checkbox, ' Bundle as ' + proposal.name)
+    const members = proposal.members.map(id => library.find(title => title.id === id))
+    card.append(label, node('p', members.map(title => title.title).join(' · ')))
+    const sources = node('div', '', 'actions')
+    for (const evidence of proposal.evidence.slice(0, 5)) sources.append(sourceLink(evidence.label || 'Connection source', evidence.id))
+    card.append(sources)
+    results.push(card)
+  }
+  const rows = node('ul', '', 'franchise-checked')
+  for (const title of scoped) {
+    const checked = franchiseChecked(title)
+    const connected = franchiseProposals.some(group => group.members.includes(title.id))
+    const item = node('li')
+    item.append(node('strong', title.title), node('span', !checked
+      ? title.imdb ? 'Not checked' : 'Add an IMDb link to check'
+      : !title.franchiseCheck.entity ? 'Checked · no matching source entry'
+      : connected ? 'Checked · connections found'
+      : 'Checked · no matching connections in your library'))
+    if (checked && title.franchiseCheck.entity) item.append(sourceLink('Source ↗', title.franchiseCheck.entity))
+    rows.append(item)
+  }
+  if (results.length) results.unshift(node('p', 'Select the bundles you want to apply. Saving lookup results only records that titles were checked.'))
+  results.push(rows)
+  $('franchise-results').replaceChildren(...results)
+  $('apply-franchise-bundles').hidden = !franchiseProposals.length
+  $('apply-franchise-bundles').disabled = franchiseBusy
+}
+
+function openFranchiseLookup(members = null) {
+  franchiseEpoch++
+  franchiseRequest?.abort()
+  franchiseMembers = members ? [...members] : null
+  franchiseBusy = false
+  $('franchise-scope').value = members ? 'all' : 'unchecked'
+  $('franchise-progress').textContent = ''
+  renderFranchiseScope()
+  renderFranchiseResults()
+  $('franchise-dialog').showModal()
+}
+$('franchise-lookup').onclick = () => openFranchiseLookup()
+$('franchise-scope').onchange = renderFranchiseScope
+$('cancel-franchise-lookup').onclick = () => franchiseRequest?.abort()
+$('franchise-dialog').addEventListener('close', () => {
+  franchiseEpoch++
+  franchiseRequest?.abort()
+})
+
+$('run-franchise-lookup').onclick = async () => {
+  if (franchiseBusy) return
+  const targets = franchiseTargets(lookupScope(), $('franchise-scope').value === 'all')
+  const ids = [...new Set(targets.map(title => title.imdb))]
+  if (!ids.length) return
+  const epoch = franchiseEpoch
+  const controller = new AbortController()
+  franchiseRequest = controller
+  franchiseBusy = true
+  renderFranchiseScope()
+  renderFranchiseResults()
+  let completed = 0
+  try {
+    for (let offset = 0; offset < ids.length; offset += 30) {
+      const batch = ids.slice(offset, offset + 30)
+      $('franchise-progress').textContent = 'Looking up connections… ' + completed + ' of ' + ids.length
+      const response = await fetch('/api/franchises', {
+        method: 'POST', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', 'X-Quiet-Screen-Catalogue': '1' },
+        body: JSON.stringify({ids:batch}),
+      })
+      const data = await response.json()
+      if (!response.ok) throw Error(data.error || 'Franchise lookup failed.')
+      if (!Array.isArray(data.results) || data.results.length !== batch.length ||
+          !data.results.every(validFranchiseCheck) ||
+          new Set(data.results.map(result => result.imdb)).size !== batch.length ||
+          data.results.some(result => !batch.includes(result.imdb))) throw Error('The lookup returned invalid title results.')
+      if (controller.signal.aborted || epoch !== franchiseEpoch) return
+      const matches = new Map(data.results.map(result => [result.imdb, result]))
+      const next = library.map(title => matches.has(title.imdb) && targets.some(target => target.id === title.id && target.imdb === title.imdb)
+        ? {...title,franchiseCheck:matches.get(title.imdb)} : title)
+      if (!commit(next, selected, 'Franchise lookup results saved.')) throw Error('Could not save checked titles.')
+      completed += batch.length
+      renderFranchiseResults()
+    }
+    $('franchise-progress').textContent = 'Checked ' + completed + ' titles. Review suggested bundles below.'
+  } catch (error) {
+    if (epoch !== franchiseEpoch) return
+    $('franchise-progress').textContent = controller.signal.aborted
+      ? 'Lookup cancelled. Completed checks were kept.'
+      : error.message + ' Completed checks were kept; failed titles can be retried.'
+  } finally {
+    if (epoch === franchiseEpoch) {
+      franchiseBusy = false
+      franchiseRequest = null
+      renderFranchiseScope()
+      renderFranchiseResults()
+    }
+  }
+}
+
+$('apply-franchise-bundles').onclick = () => {
+  if (franchiseBusy) return
+  const choices = [...$('franchise-results').querySelectorAll('input[data-proposal]:checked')]
+    .map(input => franchiseProposals[Number(input.dataset.proposal)]).filter(Boolean)
+  if (!choices.length) {
+    $('franchise-progress').textContent = 'Select at least one suggested bundle.'
+    return
+  }
+  let next = library
+  for (const proposal of choices) next = setBundle(next, proposal.members, proposal.name, [], proposal.id)
+  if (commit(next, selected, 'Selected franchise bundles saved.')) {
+    $('franchise-progress').textContent = 'Selected bundles applied. You can manage or unbundle them from the library.'
+    renderFranchiseResults()
   }
 }
 

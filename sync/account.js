@@ -99,7 +99,7 @@
   const projected=account&&linked?localDocument():null,conflicts=projected?.conflicts||[];$('#syncConflictsSection').hidden=!conflicts.length;
   $('#syncConflicts').innerHTML=conflicts.map((conflict,i)=>{
    const p=conflict.parts,title=projected.library.find(item=>item.id===p[1]),list=projected.lists.find(item=>item.id===p[1]);
-   const labels={active:'current viewing',history:'viewing dates',episode:'episode viewing',group:'series or franchise',seasons:'season episode counts',episodic:'episode tracking',name:'list name',member:'list membership',rewatch:'group rewatch',order:'library order',present:'removal',title:'title',format:'format',year:'release year',imdb:'IMDb title'};
+   const labels={active:'current viewing',history:'viewing dates',episode:'episode viewing',group:'series or franchise',franchiseCheck:'franchise lookup results',seasons:'season episode counts',episodic:'episode tracking',name:'list name',member:'list membership',rewatch:'group rewatch',order:'library order',present:'removal',title:'title',format:'format',year:'release year',imdb:'IMDb title'};
    const label=p[0]==='p'?'Theme':(p[0]==='l'?list?.name||'Removed list':title?.title||'Removed title')+' · '+labels[p[2]==='field'?p[3]:p[2]];
    function describe(value){
     if(p[2]==='present')return value?'Keep '+(p[0]==='l'?'this list':'this title'):'Keep deleted';
@@ -108,6 +108,7 @@
     if(p[2]==='episode')return value?'S'+value.season+' E'+value.episode+' · '+(value.date||'Date unknown'):'Remove episode viewing';
     if(p[2]==='member')return value?'Keep title in list':'Remove title from list';
     if(p[2]==='rewatch')return value?value.members.length+' installments':'Remove rewatch';
+    if(p[3]==='franchiseCheck')return value?'Checked '+new Date(value.checkedAt).toLocaleString()+' · '+value.links.length+' recorded connections':'Not checked';
     if(p[3]==='seasons')return value?.map(item=>'Season '+item.season+': '+item.count).join(', ')||'No season counts';
     if(p[3]==='group')return value?.mode==='manual'?value.name:value?.mode==='none'?'Standalone':'Automatic';
     if(p[3]==='episodic')return value?'Track episodes':'Hide episode tracking';

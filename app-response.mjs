@@ -7,6 +7,7 @@ const assets = new Map([
   ['/app.mjs', ['app.mjs', 'text/javascript']],
   ['/update-ui.mjs', ['update-ui.mjs', 'text/javascript']],
   ['/library.mjs', ['library.mjs', 'text/javascript']],
+  ['/franchises.mjs', ['franchises.mjs', 'text/javascript']],
   ['/sync/sync-core.js', ['sync/sync-core.js', 'text/javascript']],
   ['/sync/account.js', ['sync/account.js', 'text/javascript']],
   ['/license.txt', ['LICENSE', 'text/plain']],

@@ -111,3 +111,27 @@ by month. Undated history is counted separately. **Library display** controls
 grouped and plain views, group visibility, and expanding or collapsing groups.
 The selected sort and display controls are remembered on the device. The
 details panel offers Overview, Viewing history, and Episodes where applicable.
+
+## Franchise lookup and bundles
+
+Choose **Look up franchise connections** to check Wikidata's recorded
+relationships using your titles' IMDb identifiers. Choose **Unchecked titles
+only** or **Include previously checked titles**. The lookup remembers successful
+checks for bundles, standalones, and titles with no matching source entry.
+Failed checks stay eligible for retry. It runs only when requested.
+
+Review the source links and select suggestions before applying bundles. A new
+title can connect to a previously checked title using the saved relationship
+data. Add an IMDb link to a manually entered title before checking it.
+
+Use **Bundle titles…** to create a bundle yourself. Each bundle has **Manage
+bundle** to add or remove members, rename it, or unbundle it, plus **Check
+connections** or **Recheck connections**. Removing a title makes it standalone.
+Saved bundle choices and checked results are included in Drive sync and JSON
+backups. Separate bundles have independent identities even when names match.
+
+Lookup sends the selected IMDb IDs to the public Wikidata Query Service. It
+uses recorded franchise, series, part-of, based-on and sequel relationships.
+Source coverage varies, so a negative result means no matching connection was
+found in your current library using that data. Manual grouping remains
+available.

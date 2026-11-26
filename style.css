@@ -244,3 +244,11 @@ footer { margin-top: 16px; font-size: .85rem; }
 }
 #seasons-form textarea { width:100%; font:inherit; color:var(--text); background:var(--field); border:1px solid var(--border); border-radius:8px; padding:10px; }
 .episodes .episode-toggle { font-size:.85rem; }
+.franchise-actions { margin: 14px 0; }
+#franchise-dialog { width: min(740px, calc(100% - 24px)); }
+.bundle-members { max-height: 45dvh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px 12px; }
+.franchise-proposal { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 12px 0; }
+.franchise-proposal p { overflow-wrap: anywhere; }
+.franchise-checked li { display: grid; gap: 3px; padding: 8px 0; }
+.franchise-checked span, .franchise-checked a { font-size: .85rem; }
+.group-heading > button:not(.group-toggle) { font-size: .76rem; }

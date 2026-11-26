@@ -1,3 +1,4 @@
+import {franchiseResponse} from './franchise-lookup.mjs'
 import { createImdbEpisodeCatalog, episodeResponse } from './imdb-episodes.mjs'
 import { fileURLToPath } from 'node:url'
 import { createBrowserReleaseHandler } from './releases.mjs'
@@ -72,6 +73,16 @@ export function createAppServer(request = fetch, environment = process.env) {
           method: req.method, headers: req.headers,
           ...(req.method === 'POST' ? { body: Buffer.concat(chunks) } : {}),
         }))
+      } else if (url.pathname === '/api/franchises') {
+        const chunks=[]
+        let size=0
+        for await(const chunk of req) {
+          size+=chunk.length
+          if(size>8192)return res.writeHead(413).end()
+          chunks.push(chunk)
+        }
+        response=await franchiseResponse(new Request(url,{method:req.method,headers:req.headers,
+          ...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})}),{fetcher:request})
       } else if (url.pathname === '/api/imdb-episodes' && req.method === 'GET') {
         response = await episodeResponse(url, episodes)
       } else if (url.pathname === '/api/update-check') {

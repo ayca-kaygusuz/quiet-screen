@@ -1,3 +1,4 @@
+import {franchiseResponse} from '../franchise-lookup.mjs'
 import { createImdbEpisodeCatalog, episodeResponse } from '../imdb-episodes.mjs'
 import { fileURLToPath } from 'node:url'
 import { createUpdateController, RELEASES_URL } from './updates.mjs'
@@ -21,7 +22,7 @@ let window
 
 function openExternalLink(value) {
   const url = new URL(value)
-  if (!url.username && !url.password && (url.origin === 'https://www.imdb.com' || url.href === 'https://www.apache.org/licenses/LICENSE-2.0' || url.href === RELEASES_URL)) {
+  if (!url.username && !url.password && (url.origin === 'https://www.imdb.com' || url.href === 'https://www.apache.org/licenses/LICENSE-2.0' || url.href === RELEASES_URL || (url.origin === 'https://www.wikidata.org' && /^\/wiki\/Q\d+$/.test(url.pathname)))) {
     void shell.openExternal(url.href).catch(console.error)
   }
 }
@@ -82,6 +83,7 @@ if (!app.requestSingleInstanceLock()) {
     protocol.handle(scheme, async request => {
       const url = new URL(request.url)
       if (url.host !== 'app' || url.username || url.password) return new Response(null, { status: 403 })
+      if (url.pathname === '/api/franchises') return franchiseResponse(request)
       if (url.pathname === '/api/imdb-episodes' && request.method === 'GET') return episodeResponse(url, episodes)
       if (url.pathname.startsWith('/api/account/')) {
         const origin = request.headers.get('Origin')

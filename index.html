@@ -52,6 +52,10 @@
         </section>
       </div>
     </details>
+    <div class="actions franchise-actions">
+      <button id="franchise-lookup" type="button">Look up franchise connections</button>
+      <button id="bundle-titles" type="button">Bundle titles…</button>
+    </div>
     <nav id="filters" aria-label="Filter by watch status"></nav>
     <nav id="list-tabs" aria-label="Custom lists"></nav>
     <section class="panel" id="list-context" aria-label="List details" hidden></section>
@@ -169,6 +173,29 @@
       <h2 id="membership-heading">Add to lists</h2>
       <div id="memberships"></div>
       <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save lists</button></div>
+    </form>
+  </dialog>
+  <dialog id="franchise-dialog" aria-labelledby="franchise-heading">
+    <h2 id="franchise-heading">Look up franchise connections</h2>
+    <p>Checks Wikidata using IMDb title IDs for recorded franchise, sequel, and spin-off links. Review suggested bundles before applying them.</p>
+    <label class="field">Titles to look up<select id="franchise-scope">
+      <option value="unchecked">Unchecked titles only</option>
+      <option value="all">Include previously checked titles</option>
+    </select></label>
+    <p id="franchise-scope-summary"></p>
+    <div class="actions"><button id="run-franchise-lookup" type="button" class="primary">Look up connections</button><button id="cancel-franchise-lookup" type="button" hidden>Cancel lookup</button></div>
+    <p id="franchise-progress" role="status"></p>
+    <div id="franchise-results"></div>
+    <div class="actions end"><button type="button" data-close>Close</button><button id="apply-franchise-bundles" type="button" class="primary" hidden>Apply selected bundles</button></div>
+  </dialog>
+  <dialog id="bundle-dialog" aria-labelledby="bundle-heading">
+    <form id="bundle-form">
+      <h2 id="bundle-heading">Bundle titles</h2>
+      <label class="field">Bundle name<input name="name" required maxlength="120"></label>
+      <p>Select titles to keep in this bundle. Removed titles will become standalone.</p>
+      <div id="bundle-members" class="bundle-members"></div>
+      <p id="bundle-message" role="status"></p>
+      <div class="actions end"><button id="unbundle-titles" type="button" hidden>Unbundle all</button><button type="button" data-close>Cancel</button><button type="submit" class="primary">Save bundle</button></div>
     </form>
   </dialog>
   <dialog id="seasons-dialog" aria-labelledby="seasons-heading">

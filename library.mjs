@@ -1,3 +1,4 @@
+import {validFranchiseCheck} from './franchises.mjs'
 export const statuses = ['Watchlist', 'Watching', 'Watched', 'Rewatching']
 
 export function today() {
@@ -51,6 +52,7 @@ export function validLibrary(titles) {
       typeof title.year === 'string' && /^(\d{4})?$/.test(title.year) &&
       typeof title.imdb === 'string' && /^(tt\d{7,})?$/.test(title.imdb) &&
       (title.group === undefined || validGroup(title.group)) &&
+      (title.franchiseCheck === undefined || validFranchiseCheck(title.franchiseCheck)) &&
       (title.episodic === undefined || typeof title.episodic === 'boolean') &&
       (title.episodes === undefined || validEpisodes(title.episodes)) &&
       (title.seasons === undefined || validSeasons(title.seasons)) &&
@@ -68,6 +70,7 @@ export function isEpisodic(format) {
 export function validGroup(group) {
   return Boolean(group && ['auto', 'manual', 'none'].includes(group.mode) &&
     typeof group.name === 'string' && group.name.length <= 120 &&
+    (group.id === undefined || typeof group.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(group.id)) &&
     (group.mode !== 'manual' || group.name.trim()))
 }
 
@@ -125,8 +128,8 @@ export function seriesGroups(library) {
     if (mode === 'none') continue
     const name = mode === 'manual' ? title.group.name.trim() : relatedGroupName(inferredGroup(title.title), names)
     if (!name) continue
-    const key = groupKey(name)
-    const group = candidates.get(key) ?? { key, name, members: [], explicit: false }
+    const key = mode === 'manual' && title.group.id ? 'bundle:' + title.group.id : groupKey(name)
+    const group = candidates.get(key) ?? { key, id: mode === 'manual' ? title.group.id : undefined, name, members: [], explicit: false }
     if (mode === 'manual' && !group.explicit) {
       group.name = name
       group.explicit = true
