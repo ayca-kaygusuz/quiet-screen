@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 55
     env:
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
-      QUIET_SCREEN_GOOGLE_IOS_CLIENT_ID: ${{ vars.QUIET_SCREEN_GOOGLE_IOS_CLIENT_ID }}
+      QUIET_SCREEN_GOOGLE_IOS_CLIENT_ID: ${{ vars.QUIET_SCREEN_GOOGLE_IOS_CLIENT_ID || secrets.QUIET_SCREEN_GOOGLE_IOS_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0

@@ -6,14 +6,14 @@ import {latestUpdate,releaseGet} from '../releases.mjs'
 export function createLinuxUpdates({app,shell,network=async()=>({})}){
  let status={phase:'idle'},available,downloaded,busy=false,autoCheck=true,lastChecked=0,online=true,metered=false
  const snapshot=()=>({...status,currentVersion:app.getVersion(),enabled:app.isPackaged,platform:'linux',installMode:'manual',lastChecked})
- async function check(manual=false){if(busy||!online||!manual&&(!autoCheck||metered||Date.now()-lastChecked<86400000))return snapshot();busy=true;status={phase:'checking'}
+ async function check({manual=false}={}){if(busy||!online||!manual&&(!autoCheck||metered||Date.now()-lastChecked<86400000))return snapshot();busy=true;status={phase:'checking'}
   try{available=await latestUpdate(app.getVersion(),{kind:'linux'});lastChecked=Date.now();status={phase:available?'available':'up-to-date',version:available?.version??''}}catch{status={phase:'error'}}finally{busy=false}return snapshot()}
  async function handle(request){const url=new URL(request.url)
   if(url.pathname==='/api/update-status'&&request.method==='GET')return Response.json(snapshot())
   if(request.method!=='POST'||request.headers.get('X-Quiet-Screen-Update')!=='1')return new Response('Invalid update request',{status:403})
   const action=url.searchParams.get('action')
   if(action==='configure'){const data=await request.json();autoCheck=data.autoCheck!==false;online=data.online!==false;metered=data.metered===true;return Response.json(snapshot())}
-  if(action==='check')return Response.json(await check(true))
+  if(action==='check')return Response.json(await check({manual:true}))
   if(action==='install'&&downloaded){shell.showItemInFolder(downloaded);return Response.json(snapshot())}
   if(action!=='download'||busy||!available)return new Response('No package is ready',{status:409})
   busy=true;status={phase:'downloading',version:available.version,progress:0,downloaded:0,total:available.size}
@@ -27,5 +27,6 @@ export function createLinuxUpdates({app,shell,network=async()=>({})}){
   }catch{await rm(temporary,{force:true});status={phase:'error'}}finally{busy=false}})()
   return Response.json(snapshot())
  }
- return {check,handle,dispose(){}}
+ const action=async(name,body)=>{const response=await handle(new Request('https://app/api/update?action='+name,{method:'POST',headers:{'X-Quiet-Screen-Update':'1'},...(body?{body:JSON.stringify(body)}:{})}));if(!response.ok)throw Error('Update action unavailable');return response.json()}
+ return {check,handle,getStatus:snapshot,configure:body=>action('configure',body),download:()=>action('download'),install:()=>action('install'),dispose(){}}
 }
