@@ -171,6 +171,15 @@
       <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save lists</button></div>
     </form>
   </dialog>
+  <dialog id="seasons-dialog" aria-labelledby="seasons-heading">
+    <form id="seasons-form">
+      <h2 id="seasons-heading">Season episode counts</h2>
+      <p>Enter one season per line as season number, episode count. Include every season you want to track. Specials use season 0 and are logged manually.</p>
+      <label class="field">Seasons<textarea name="seasons" rows="8" placeholder="1, 10&#10;2, 8"></textarea></label>
+      <p>Existing viewings stay in history. Select episode viewings to clear incorrect records.</p>
+      <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Save counts</button></div>
+    </form>
+  </dialog>
   <dialog id="episode-dialog" aria-labelledby="episode-heading">
     <form id="episode-form">
       <h2 id="episode-heading">Log episode</h2>

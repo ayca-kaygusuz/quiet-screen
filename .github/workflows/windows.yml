@@ -19,6 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install --ignore-scripts --package-lock=false
       - run: npm test
       - name: Verify Google client configuration and configure Windows app
         env:
@@ -48,6 +49,14 @@ jobs:
           Expand-Archive -LiteralPath $zip -DestinationPath $runtime
           choco install nsis --yes --no-progress
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install executable resource editor
+        run: npm install --no-save --package-lock=false resedit@1.7.2
+      - name: Test episode controls in Electron
+        run: |
+          $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron/electron.exe'
+          $test = (Resolve-Path scripts/check-episode-ui.mjs).Path
+          $process = Start-Process -FilePath $runtime -ArgumentList ('"' + $test + '"') -WindowStyle Hidden -Wait -PassThru
+          exit $process.ExitCode
       - name: Build installer
         run: |
           $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron'

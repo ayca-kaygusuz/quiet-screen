@@ -1,5 +1,5 @@
 import './sync/sync-core.js'
-import { librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
+import { clearEpisodeViewings, episodeProgress, validSeasons, librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
 
 const $ = id => document.getElementById(id)
 const titleForm = $('title-form')
@@ -325,6 +325,7 @@ titleForm.onsubmit = event => {
     group: { mode: fields.groupMode.value, name: fields.groupMode.value === 'manual' ? fields.groupName.value.trim() : '' },
     episodic: fields.episodic.checked,
     episodes: editing?.episodes ?? [],
+    seasons: editing?.seasons ?? [],
     active: editing ? editing.active : initial === 'Watching' ? start({ active: null }).active : null,
     history: editing?.history ?? (initial === 'Watched' ? [{ id: viewingId(), started: null, finished: fields.finished.value || null }] : []),
   }
@@ -532,6 +533,7 @@ function normalizeTitles(titles) {
     group: title.group ?? { mode: 'auto', name: '' },
     episodic: title.episodic ?? isEpisodic(title.format),
     episodes: title.episodes ?? [],
+    seasons: title.seasons ?? [],
     history: title.history.map((view, index) => ({
       ...view,
       id: view.id ?? 'legacy-' + String(index).padStart(8, '0'),
@@ -613,6 +615,7 @@ function openEpisode(title, defaults, existing) {
   episodeEdit = { titleId: title.id, existing }
   const values = existing ?? defaults
   $('episode-heading').textContent = existing ? 'Edit episode viewing' : 'Log episode'
+  episodeFields.episode.setCustomValidity('')
   episodeFields.season.value = values.season
   episodeFields.episode.value = values.episode
   episodeFields.name.value = values.name ?? ''
@@ -630,10 +633,16 @@ function saveEpisode(title, values, existing) {
     run: existing ? existing.run ?? null : title.active?.id ?? null,
   }
   if (!validEpisode(view)) return false
+  const season = title.seasons.find(item => item.season === view.season)
+  if (season && view.episode > season.count && (!existing || existing.season !== view.season || existing.episode !== view.episode)) {
+    invalid(episodeFields.episode, 'This season has ' + season.count + ' episodes. Update its count if needed.')
+    return false
+  }
   const episodes = existing ? title.episodes.map(item => item.id === view.id ? view : item) : [...title.episodes, view]
   return update({ ...title, episodes }, 'Episode viewing saved.')
 }
 
+episodeForm.oninput = () => episodeFields.episode.setCustomValidity('')
 episodeForm.onsubmit = event => {
   event.preventDefault()
   const title = library.find(item => item.id === episodeEdit.titleId)
@@ -646,13 +655,15 @@ episodeForm.onsubmit = event => {
 }
 
 function episodeControls(title) {
-  const current = title.active?.id ? title.episodes.filter(view => view.run === title.active.id) : title.episodes
-  const next = nextEpisode(current)
-  const code = 'S' + next.season + ' E' + next.episode
+  const next = nextEpisode(episodeProgress(title), title.seasons)
   const controls = node('div', '', 'actions')
-  if (next.episode <= 99999) controls.append(button('Mark next episode watched · ' + code,
-    () => saveEpisode(title, { ...next, date: today() }), 'primary'))
-  controls.append(button('Log episode…', () => openEpisode(title, { ...next, episode: Math.min(next.episode, 99999) })))
+  if (next) controls.append(button('Mark next episode watched · S' + next.season + ' E' + next.episode,
+    () => saveEpisode(title, {...next, date:today()}), 'primary'))
+  else controls.append(node('p', title.seasons.length
+    ? 'All configured episodes watched. Add another season when available.'
+    : 'Set season episode counts to enable next-episode suggestions.'))
+  controls.append(button('Log episode…', () => openEpisode(title, next ?? {season:1,episode:1})),
+    button('Season episode counts…', () => openSeasons(title)))
   return controls
 }
 
@@ -660,6 +671,42 @@ function renderEpisodes(detail, title) {
   const section = node('section', '', 'episodes')
   const unique = new Set(title.episodes.map(view => view.season + ':' + view.episode)).size
   section.append(node('h3', 'Episodes'), node('p', unique + ' distinct episodes watched'), episodeControls(title))
+  const selectedViews = new Set()
+  const selectionCount = node('span', '0 viewings selected')
+  const clearSelected = button('Clear selected viewings', () => {
+    if (!selectedViews.size || !confirm('Clear ' + selectedViews.size + ' selected episode viewings?')) return
+    const current = library.find(item => item.id === title.id)
+    if (current) update(clearEpisodeViewings(current, selectedViews), 'Episode viewings cleared.')
+  })
+  clearSelected.disabled = true
+  const checkboxes = []
+  function selector(label, views) {
+    const ids = views.map(view => view.id)
+    const wrapper = node('label', '', 'episode-toggle')
+    const input = node('input')
+    input.type = 'checkbox'
+    input.onchange = () => {
+      for (const id of ids) {
+        if (input.checked) selectedViews.add(id)
+        else selectedViews.delete(id)
+      }
+      selectionCount.textContent = selectedViews.size + ' viewings selected'
+      clearSelected.disabled = !selectedViews.size
+      for (const entry of checkboxes) {
+        const count = entry.ids.filter(id => selectedViews.has(id)).length
+        entry.input.checked = count === entry.ids.length
+        entry.input.indeterminate = count > 0 && count < entry.ids.length
+      }
+    }
+    checkboxes.push({input,ids})
+    wrapper.append(input, ' ' + label)
+    return wrapper
+  }
+  if (title.episodes.length) {
+    const actions = node('div', '', 'actions')
+    actions.append(selector('Select all viewings', title.episodes),selectionCount,clearSelected)
+    section.append(actions)
+  }
   const seasons = new Map()
   for (const view of title.episodes) {
     const season = seasons.get(view.season) ?? []
@@ -683,12 +730,13 @@ function renderEpisodes(detail, title) {
       const first = watched[0]
       const name = watched.find(view => view.name)?.name
       const label = node('div', 'Episode ' + number + (name ? ' · ' + name : ''))
+      label.prepend(selector('Select episode ' + number + ' viewings', watched))
       label.append(node('span', watched.length + (watched.length === 1 ? ' viewing' : ' viewings')))
       const episode = node('details')
       episode.append(node('summary', 'View dates'))
       for (const view of watched) {
         const row = node('div', '', 'actions')
-        row.append(node('span', view.date ? formatDate(view.date) : 'Date unknown'),
+        row.append(selector('Select viewing', [view]), node('span', view.date ? formatDate(view.date) : 'Date unknown'),
           button('Edit', () => openEpisode(title, view, view)),
           button('Remove', () => {
             if (confirm('Remove this episode viewing?')) {
@@ -699,7 +747,7 @@ function renderEpisodes(detail, title) {
       }
       items.append(listItem(label, button('Log rewatch', () => openEpisode(title, { ...first, name })), episode))
     }
-    season.append(summary, items)
+    season.append(summary, selector('Select season ' + seasonNumber + ' viewings', views), items)
     section.append(season)
   }
   detail.append(section)
@@ -859,6 +907,26 @@ function renderLists(current) {
 
 for (const dialog of document.querySelectorAll('dialog')) {
   dialog.addEventListener('close', () => globalThis.QuietScreenAccount?.resume())
+}
+
+const seasonsForm = $('seasons-form')
+function openSeasons(title) {
+  seasonsForm.dataset.title = title.id
+  seasonsForm.elements.seasons.value = title.seasons.map(item => item.season + ', ' + item.count).join('\n')
+  seasonsForm.elements.seasons.setCustomValidity('')
+  $('seasons-dialog').showModal()
+}
+seasonsForm.oninput = () => seasonsForm.elements.seasons.setCustomValidity('')
+seasonsForm.onsubmit = event => {
+  event.preventDefault()
+  const input = seasonsForm.elements.seasons
+  const seasons = input.value.split(/\r?\n/).filter(line => line.trim()).map(line => {
+    const match = /^\s*(\d+)\s*,\s*(\d+)\s*$/.exec(line)
+    return match ? {season:Number(match[1]), count:Number(match[2])} : null
+  })
+  if (!validSeasons(seasons)) return invalid(input, 'Use one unique season per line, such as 1, 10.')
+  const title = library.find(item => item.id === seasonsForm.dataset.title)
+  if (title && update({...title,seasons},'Season counts saved.')) $('seasons-dialog').close()
 }
 
 globalThis.QuietScreenApp = syncApp

@@ -53,6 +53,7 @@ export function validLibrary(titles) {
       (title.group === undefined || validGroup(title.group)) &&
       (title.episodic === undefined || typeof title.episodic === 'boolean') &&
       (title.episodes === undefined || validEpisodes(title.episodes)) &&
+      (title.seasons === undefined || validSeasons(title.seasons)) &&
       (title.active === null || !!title.active && validDate(title.active.started) && (title.active.id === undefined || typeof title.active.id === 'string' && title.active.id.length <= 100)) &&
       Array.isArray(title.history) && new Set(title.history.map((view, index) => view?.id ?? 'legacy-' + String(index).padStart(8, '0'))).size === title.history.length && title.history.every(view =>
         !!view && (view.id === undefined || typeof view.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(view.id)) && validDate(view.started) && validDate(view.finished) &&
@@ -132,10 +133,30 @@ export function validLists(lists) {
       list.rewatch.baseline.every(n => Number.isSafeInteger(n) && n >= 0))))
 }
 
-export function nextEpisode(episodes) {
-  const latest = episodes.reduce((best, view) => !best || view.season > best.season ||
-    (view.season === best.season && view.episode > best.episode) ? view : best, null)
-  return latest ? { season: latest.season, episode: latest.episode + 1 } : { season: 1, episode: 1 }
+export function validSeasons(seasons) {
+  return Array.isArray(seasons) && seasons.length <= 10000 &&
+    new Set(seasons.map(item => item?.season)).size === seasons.length &&
+    seasons.every(item => item && Number.isInteger(item.season) && item.season >= 0 && item.season <= 9999 &&
+      Number.isInteger(item.count) && item.count >= 1 && item.count <= 99999)
+}
+
+export function episodeProgress(title) {
+  return title.active?.id ? title.episodes.filter(view => view.run === title.active.id) : title.episodes
+}
+
+export function nextEpisode(episodes, seasons = []) {
+  const watched = new Set(episodes.map(view => view.season + ':' + view.episode))
+  for (const {season, count} of [...seasons].filter(item => item.season > 0).sort((a,b) => a.season-b.season)) {
+    for (let episode=1; episode<=count; episode++) {
+      if (!watched.has(season + ':' + episode)) return {season, episode}
+    }
+  }
+  return null
+}
+
+export function clearEpisodeViewings(title, ids) {
+  const selected = new Set(ids)
+  return {...title, episodes:title.episodes.filter(view => !selected.has(view.id))}
 }
 
 const titleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })

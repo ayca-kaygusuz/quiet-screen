@@ -1,13 +1,13 @@
 // Copyright 2026 Alex (Ayca Kaygusuz)
 // SPDX-License-Identifier: Apache-2.0
 
-import { validEpisode, validGroup, validLists } from '../library.mjs';
+import { validSeasons, validEpisode, validGroup, validLists } from '../library.mjs';
 
 /* Shared by the browser, Windows app and Drive adapter. No credentials belong here. */
 (function(root){
  'use strict';
  const SCHEMA=1,MAX_BYTES=10*1024*1024;
- const fields=new Set(["title","format","year","imdb","order","group","episodic"]);
+ const fields=new Set(["title","format","year","imdb","order","group","episodic","seasons"]);
  const clone=v=>JSON.parse(JSON.stringify(v)),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
  const key=parts=>JSON.stringify(parts),dotKey=h=>h.dot.join(':');
  function empty(){return {schema:SCHEMA,clock:{},registers:[]}}
@@ -27,6 +27,7 @@ import { validEpisode, validGroup, validLists } from '../library.mjs';
   if(p[2]==='active')return plain(v)&&(v.started===null||calendarDate(v.started))&&
    (v.id===undefined||typeof v.id==='string'&&v.id.length<=100);
   if(p[2]==='episode')return v.id===p[3]&&validEpisode(v);
+  if(p[3]==='seasons')return validSeasons(v);
   if(p[3]==='group')return validGroup(v);
   if(p[3]==='episodic')return typeof v==='boolean';
   if(p[2]==='history')return plain(v)&&v.id===p[3]&&

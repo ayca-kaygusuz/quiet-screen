@@ -19,6 +19,8 @@ VIAddVersionKey /LANG=1033 "ProductName" "Quiet Screen"
 VIAddVersionKey /LANG=1033 "FileDescription" "Quiet Screen installer"
 VIAddVersionKey /LANG=1033 "FileVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "Quiet Screen contributors"
+!define MUI_ICON "${APP_ICON}"
+!define MUI_UNICON "${APP_ICON}"
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\Quiet Screen.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Open Quiet Screen"

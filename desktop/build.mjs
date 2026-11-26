@@ -1,3 +1,4 @@
+import { setExecutableIcon } from './icon.mjs'
 import { access, cp, mkdir, mkdtemp, readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
@@ -25,8 +26,9 @@ await cp(runtime, appDir, {
     .includes(relative(runtime, source)),
 })
 await rename(join(appDir, 'electron.exe'), join(appDir, 'Quiet Screen.exe'))
+await setExecutableIcon(join(appDir, 'Quiet Screen.exe'), join(project,'desktop/assets/icon.ico'))
 await mkdir(join(payload, 'desktop'), { recursive: true })
-for (const name of ['package.json', 'index.html', 'style.css', 'app.mjs', 'app-response.mjs', 'library.mjs', 'releases.mjs', 'update-ui.mjs', 'LICENSE', 'NOTICE', 'sync', 'desktop/main.mjs', 'desktop/google-account.mjs', 'desktop/updates.mjs']) {
+for (const name of ['package.json', 'index.html', 'style.css', 'app.mjs', 'app-response.mjs', 'library.mjs', 'releases.mjs', 'update-ui.mjs', 'LICENSE', 'NOTICE', 'sync', 'desktop/main.mjs', 'desktop/google-account.mjs', 'desktop/updates.mjs', 'desktop/assets']) {
   await cp(join(project, name), join(payload, name), { recursive: true })
 }
 
@@ -51,7 +53,7 @@ await writeFile(uninstallFile, (await uninstallCommands(appDir)).join('\r\n') + 
 const artifact = join(output, 'Quiet-Screen-Setup-' + version + '-x64.exe')
 execFileSync(compiler, [
   '/V2', '/DAPP_DIR=' + appDir, '/DUNINSTALL_FILES=' + uninstallFile, '/DAPP_VERSION=' + version,
-  '/DOUTPUT_FILE=' + artifact, join(project, 'desktop', 'installer.nsi'),
+  '/DOUTPUT_FILE=' + artifact, '/DAPP_ICON=' + join(project,'desktop/assets/icon.ico'), join(project, 'desktop', 'installer.nsi'),
 ], { stdio: 'inherit', env: { ...process.env, NSISDIR: dirname(compiler) } })
 const installer = await readFile(artifact)
 if (installer.subarray(0, 2).toString() !== 'MZ') throw new Error('The installer is not a Windows executable.')

@@ -25,7 +25,7 @@ test('concurrent episode viewings and independent list membership merge', () => 
   assert.ok(validLists(result.lists))
   assert.deepEqual(result.library.find(item => item.id === 'series').episodes, [event('a1', 1), event('b1', 2)])
   assert.deepEqual(result.lists[0].members, ['movie', 'series'])
-  assert.deepEqual(nextEpisode(result.library.find(item => item.id === 'series').episodes), { season: 1, episode: 3 })
+  assert.deepEqual(nextEpisode(result.library.find(item => item.id === 'series').episodes, [{season:1,count:3}]), { season: 1, episode: 3 })
   assert.equal(result.library.find(item => item.id === 'series').history[0].finished, null)
 })
 
@@ -77,7 +77,7 @@ test('automatic grouping can be overridden and episode numbering starts at S1 E1
   const groups = seriesGroups([title, sequel, manual, standalone])
   assert.deepEqual(groups.get('series').members, ['series', 'sequel', 'manual'])
   assert.equal(groups.has('standalone'), false)
-  assert.deepEqual(nextEpisode([]), { season: 1, episode: 1 })
+  assert.deepEqual(nextEpisode([], [{season:1,count:10}]), { season: 1, episode: 1 })
 })
 
 test('Drive reports setup, permission and policy denials without exposing Google response details', async () => {

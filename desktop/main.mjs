@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { createUpdateController, RELEASES_URL } from './updates.mjs'
 import { createGoogleAccount } from './google-account.mjs'
 import { app, BrowserWindow, dialog, Menu, protocol, safeStorage, session, shell } from 'electron'
@@ -27,6 +28,7 @@ function openExternalLink(value) {
 function createWindow() {
   window = new BrowserWindow({
     width: 1160, height: 850, minWidth: 420, minHeight: 500,
+    icon: fileURLToPath(new URL('./assets/icon.ico',import.meta.url)),
     show: false, backgroundColor: '#17181d', autoHideMenuBar: true,
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   })

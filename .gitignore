@@ -3,3 +3,4 @@ private/
 .env
 .env.*
 desktop/google-client.generated.json
+node_modules/

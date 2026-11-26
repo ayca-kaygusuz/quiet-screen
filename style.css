@@ -242,3 +242,5 @@ footer { margin-top: 16px; font-size: .85rem; }
   .insights-grid, .library-tools { grid-template-columns: 1fr; gap: 4px; }
   #watch-activity { gap: 3px; }
 }
+#seasons-form textarea { width:100%; font:inherit; color:var(--text); background:var(--field); border:1px solid var(--border); border-radius:8px; padding:10px; }
+.episodes .episode-toggle { font-size:.85rem; }
