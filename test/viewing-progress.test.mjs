@@ -40,6 +40,9 @@ test('legacy watchlist episode logs migrate deterministically and Start watching
  assert.equal(episodeProgress(start(old)).length,2)
  assert.deepEqual(nextEpisode(episodeProgress(a),a.seasons),{season:1,episode:3})
  assert.equal(reconcileEpisodeActivity({...old,episodes:[episode(1),episode(2),episode(3)]}).history.length,1)
+ const alreadyStarted=reconcileEpisodeActivity({...old,active:{id:'old-start',started:null}})
+ assert.equal(episodeProgress(alreadyStarted).length,2)
+ assert.deepEqual(nextEpisode(episodeProgress(alreadyStarted),alreadyStarted.seasons),{season:1,episode:3})
 })
 
 test('unknown season boundaries do not declare completion; known release boundaries allow catching up',()=>{

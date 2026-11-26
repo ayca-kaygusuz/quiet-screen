@@ -42,6 +42,9 @@ export function reconcileEpisodeActivity(title, date=null) {
   if(!(title.episodic??isEpisodic(title.format))||!title.episodes?.length)return title
   if(!title.active&&!title.history.length)title=start(title,date,'first-viewing')
   if(!title.active)return title
+  if(!title.history.length&&title.active.id&&title.episodes.some(e=>e.run!==title.active.id)) {
+    title={...title,episodes:title.episodes.map(e=>({...e,run:title.active.id}))}
+  }
   const progress=episodeProgress(title)
   if(!progress.some(e=>e.season>0))return title
   const releases=releaseProgress(title)
