@@ -28,7 +28,7 @@ await cp(runtime, appDir, {
 await rename(join(appDir, 'electron.exe'), join(appDir, 'Quiet Screen.exe'))
 await setExecutableIcon(join(appDir, 'Quiet Screen.exe'), join(project,'desktop/assets/icon.ico'))
 await mkdir(join(payload, 'desktop'), { recursive: true })
-for (const name of ['package.json', 'index.html', 'style.css', 'app.mjs', 'app-response.mjs', 'imdb-episodes.mjs', 'episode-releases.mjs', 'franchises.mjs', 'franchise-lookup.mjs', 'library.mjs', 'releases.mjs', 'update-ui.mjs', 'LICENSE', 'NOTICE', 'sync', 'desktop/main.mjs', 'desktop/google-account.mjs', 'desktop/updates.mjs', 'desktop/assets']) {
+for (const name of ['package.json', 'index.html', 'style.css', 'app.mjs', 'app-response.mjs', 'catalogue.mjs', 'imdb-episodes.mjs', 'episode-releases.mjs', 'franchises.mjs', 'franchise-lookup.mjs', 'library.mjs', 'releases.mjs', 'update-ui.mjs', 'LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', 'platform-manifest.json', 'sync', 'desktop/main.mjs', 'desktop/google-account.mjs', 'desktop/updates.mjs', 'desktop/linux-updates.mjs', 'desktop/assets']) {
   await cp(join(project, name), join(payload, name), { recursive: true })
 }
 

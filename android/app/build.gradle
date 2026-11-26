@@ -1,0 +1,39 @@
+plugins { id 'com.android.application' }
+def appMetadata = new groovy.json.JsonSlurper().parse(file('../../package.json'))
+def parts = appMetadata.version.tokenize('.').collect { it.toInteger() }
+def publicClient = System.getenv('QUIET_SCREEN_GOOGLE_ANDROID_CLIENT_ID') ?: ''
+if (publicClient && !(publicClient ==~ /[0-9]+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com/)) throw new GradleException('Invalid public Android OAuth client ID.')
+android {
+    namespace 'com.quietscreen.android'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.quietscreen.android'
+        minSdk 26
+        targetSdk 36
+        versionCode parts[0] * 1000000 + parts[1] * 1000 + parts[2]
+        versionName appMetadata.version
+        buildConfigField 'boolean', 'GOOGLE_AUTH_CONFIGURED', (publicClient || System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_FILE')) ? 'true' : 'false'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    buildFeatures { buildConfig true }
+    compileOptions { coreLibraryDesugaringEnabled true; sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    signingConfigs {
+        if (System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_FILE')) {
+            release {
+                storeFile file(System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_FILE'))
+                storePassword System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_PASSWORD')
+                keyAlias 'quiet-screen'
+                keyPassword System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes { release { minifyEnabled false; if (System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_FILE')) signingConfig signingConfigs.release } }
+}
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation 'androidx.activity:activity:1.10.1'
+    implementation 'androidx.webkit:webkit:1.13.0'
+    implementation 'com.google.android.gms:play-services-auth:21.4.0'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}

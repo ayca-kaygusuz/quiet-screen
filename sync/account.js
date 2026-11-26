@@ -130,7 +130,7 @@
  }
  App.changed=recordChange;
  function schedule(delay=1500){clearTimeout(syncTimer);if(account&&canAuto())syncTimer=setTimeout(()=>void sync(false),delay)}
- async function request(action,body){const response=await fetch('/api/account/'+action,{method:body===undefined?'GET':'POST',cache:'no-store',headers:body===undefined?{}:{'Content-Type':'application/json','X-Quiet-Screen-Account':'1'},...(body===undefined?{}:{body:JSON.stringify(body)})});let data;try{data=await response.json()}catch{throw Error('The account service is unavailable. Your local library is still available.')}if(!response.ok){const error=Error(data.error||'The Google connection could not be reached.');error.code=data.code;throw error}return data}
+ async function request(action,body){if(action==='sync'&&connection.syncTransport==='browser-v1')return root.QuietScreenHostedSync.sync(body);const response=await fetch('/api/account/'+action,{method:body===undefined?'GET':'POST',cache:'no-store',headers:body===undefined?{}:{'Content-Type':'application/json','X-Quiet-Screen-Account':'1'},...(body===undefined?{}:{body:JSON.stringify(body)})});let data;try{data=await response.json()}catch{throw Error('The account service is unavailable. Your local library is still available.')}if(!response.ok){const error=Error(data.error||'The Google connection could not be reached.');error.code=data.code;throw error}return data}
  function activate(next){
   if(workspaceReady&&account?.id===next?.id){account=next;return}
   const saved=next?read(workspaceKey(next.id),null):null,nextState=saved?.state?S.validate(saved.state):S.empty();if(next)validated(S.project(nextState));

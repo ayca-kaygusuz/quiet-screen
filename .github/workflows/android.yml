@@ -1,0 +1,108 @@
+name: Android application
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: quiet-screen-android
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      QUIET_SCREEN_GOOGLE_ANDROID_CLIENT_ID: ${{ vars.QUIET_SCREEN_GOOGLE_ANDROID_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d
+      - run: npm ci --ignore-scripts
+      - name: Shared regression checks
+        run: npm test
+      - name: Prepare Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          cmdline-tools-version: '12700392'
+          log-accepted-android-sdk-licenses: false
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - run: chmod +x android/gradlew
+      - name: Build Android app
+        env:
+          QUIET_SCREEN_ANDROID_KEYSTORE_BASE64: ${{ secrets.QUIET_SCREEN_ANDROID_KEYSTORE_BASE64 }}
+          QUIET_SCREEN_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.QUIET_SCREEN_ANDROID_KEYSTORE_PASSWORD }}
+        run: node scripts/build-android.mjs ${{ inputs.publish && '--release' || '' }}
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Check Android runtime
+        uses: ReactiveCircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w -r com.quietscreen.android.test/androidx.test.runner.AndroidJUnitRunner > work/android/instrumentation-results.txt
+            cat work/android/instrumentation-results.txt
+            node -e "const s=require('fs').readFileSync('work/android/instrumentation-results.txt','utf8');if(!/OK \(\d+ tests?\)/.test(s)||/FAILURES!!!|INSTRUMENTATION_FAILED|INSTRUMENTATION_ABORTED|shortMsg=Process crashed/.test(s))throw Error('Android instrumentation did not pass');"
+            adb pull /sdcard/Android/data/com.quietscreen.android/files/previews work/android/previews
+      - name: Keep Android package briefly
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: quiet-screen-android
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            work/android/Quiet-Screen-Android-*.apk
+            work/android/SHA256SUMS-Android.txt
+            work/android/android-signing-certificate.txt
+            work/android/android-build.json
+            work/android/desugar_jdk_libs-*-source.zip
+      - name: Keep runtime results briefly
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: quiet-screen-android-previews
+          retention-days: 1
+          if-no-files-found: warn
+          path: |
+            work/android/previews/*.png
+            work/android/instrumentation-results.txt
+            android/app/build/reports/androidTests/connected/**
+            android/app/build/reports/lint-results-release.html
+  publish:
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: quiet-screen-release-assets
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: quiet-screen-android
+          path: platform-release
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-platform.mjs android platform-release

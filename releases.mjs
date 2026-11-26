@@ -28,6 +28,9 @@ async function limitedText(response,limit){
 }
 export function updateFilename(version,kind='windows'){
  if(!releaseVersionParts(version))throw Error('Invalid update version');
+ if(kind==='linux')return `Quiet-Screen-${version}-linux-amd64.deb`;
+ if(kind==='android')return `Quiet-Screen-Android-${version}.apk`;
+ if(kind==='ios')return `Quiet-Screen-iOS-${version}-unsigned.ipa`;
  if(kind!=='windows')throw Error('Unsupported update platform');
  return `Quiet-Screen-Setup-${version}-x64.exe`;
 }

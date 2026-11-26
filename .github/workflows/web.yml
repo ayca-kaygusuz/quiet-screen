@@ -1,0 +1,31 @@
+name: Hosted browser application
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quiet-screen-web
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: node web/build.mjs
+      - name: Deploy to free Cloudflare Workers
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+          QUIET_SCREEN_GOOGLE_WEB_CLIENT_ID: ${{ vars.QUIET_SCREEN_GOOGLE_WEB_CLIENT_ID }}
+          QUIET_SCREEN_GOOGLE_WEB_CLIENT_SECRET: ${{ secrets.QUIET_SCREEN_GOOGLE_WEB_CLIENT_SECRET }}
+        run: node web/deploy.mjs
+      - name: Verify live application and source
+        env:
+          APP_ORIGIN: ${{ steps.deploy.outputs.origin }}
+        run: node web/smoke.mjs

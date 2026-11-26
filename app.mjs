@@ -684,6 +684,17 @@ for (const close of document.querySelectorAll('[data-close]')) {
 }
 $('add').onclick = () => openTitle()
 $('library-search').oninput = render
+function backupDocument({library:titles,preferences,lists:savedLists}) {
+  return {version:1,titles,preferences,lists:savedLists}
+}
+function importBackup(backup) {
+  if(backup?.version!==1||!validLibrary(backup.titles)||!validLists(backup.lists??[]))throw Error('This is not a valid Quiet Screen backup.')
+  if(!confirm('Replace your current library with '+backup.titles.length+' titles from this backup?'))return
+  filter='All titles'
+  replaceWorkspace(validateDocument({library:backup.titles,lists:backup.lists??[],preferences:{theme:validTheme(backup.preferences?.theme)?backup.preferences.theme:themePicker.value}}),null)
+  notice('Library restored.')
+  syncApp.changed?.()
+}
 function downloadBackup({ library: titles, preferences, lists: savedLists }, prefix = 'quiet-screen') {
   const blob = new Blob([JSON.stringify({ version: 1, titles, preferences, lists: savedLists }, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -703,17 +714,7 @@ $('backup-file').onchange = async event => {
   if (!file) return
   try {
     const backup = JSON.parse(await file.text())
-    if (backup?.version !== 1 || !validLibrary(backup.titles) || !validLists(backup.lists ?? [])) throw new Error()
-    if (confirm('Replace your current library with ' + backup.titles.length + ' titles from this backup?')) {
-      filter = 'All titles'
-      replaceWorkspace(validateDocument({
-        library: backup.titles,
-        lists: backup.lists ?? [],
-        preferences: { theme: validTheme(backup.preferences?.theme) ? backup.preferences.theme : themePicker.value },
-      }), null)
-      notice('Library restored.')
-      syncApp.changed?.()
-    }
+    importBackup(backup)
   } catch {
     notice('This file is not a valid Quiet Screen backup.')
   }
@@ -808,7 +809,7 @@ const syncApp = {
   },
   validateDocument,
   message: notice,
-  downloadBackup,
+  downloadBackup, backupDocument, importBackup,
   hasDraft: () => Boolean(document.querySelector('dialog[open]')),
   themeLabel: value => [...themePicker.options].find(option => option.value === value)?.text ?? 'Default theme',
   esc: value => String(value).replace(/[&<>"']/g, character =>
@@ -1385,7 +1386,7 @@ async function fetchTitleEpisodes(id, refresh = false) {
       const next = library.map(title => title.imdb === id && title.episodic &&
         (refresh || !title.seasons.length) ? {...title,seasons:seasonsWithReleases(title,result.seasons)} : title)
       if (next.some((title,index) => title !== library[index])) {
-        if (!commit(next, selected, 'Episode information loaded from IMDb.')) throw Error()
+        if (!commit(next, selected, 'Episode information loaded from ' + (result.source === 'TVmaze' ? 'TVmaze' : 'IMDb') + '.')) throw Error()
       } else render()
     } else render()
   } catch {
@@ -1655,3 +1656,12 @@ function renderInsights() {
     return column
   }))
 }
+
+$('offline-about').addEventListener('toggle',async()=>{
+  if(!$('offline-about').open||$('offline-licenses').textContent)return
+  try{
+    const names=['/license.txt','/NOTICE','/THIRD_PARTY_NOTICES.md',...(document.documentElement.dataset.platform?['/native-notices.txt']:[])]
+    const texts=await Promise.all(names.map(async name=>{const response=await fetch(name);if(!response.ok)throw Error();return response.text()}))
+    $('offline-licenses').textContent=texts.join('\n\n')
+  }catch{$('offline-licenses').textContent='The installed license files could not be opened.'}
+})

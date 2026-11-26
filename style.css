@@ -297,3 +297,5 @@ footer { margin-top: 16px; font-size: .85rem; }
 .franchise-checked li { display: grid; gap: 3px; padding: 8px 0; }
 .franchise-checked span, .franchise-checked a { font-size: .85rem; }
 .group-heading > button:not(.group-toggle) { font-size: .76rem; }
+
+#offline-licenses { white-space: pre-wrap; overflow-wrap: anywhere; font: .8rem/1.5 monospace; max-height: 320px; overflow: auto; }

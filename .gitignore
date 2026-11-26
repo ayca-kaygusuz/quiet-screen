@@ -4,3 +4,14 @@ private/
 .env.*
 desktop/google-client.generated.json
 node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/
+android/local.properties
+ios/QuietScreen/Web/
+ios/QuietScreen/Assets.xcassets/
+ios/**/xcuserdata/
+*.p12
+*.jks
+*.keystore

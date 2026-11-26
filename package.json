@@ -1,6 +1,6 @@
 {
   "name": "quiet-screen",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "productName": "Quiet Screen",
   "private": true,
   "type": "module",
@@ -9,12 +9,87 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test",
-    "build:windows": "node desktop/build.mjs"
+    "build:windows": "node desktop/build.mjs",
+    "build:linux": "node scripts/build-linux.mjs",
+    "build:android": "node scripts/build-android.mjs",
+    "build:ios": "node scripts/build-ios.mjs",
+    "build:web": "node web/build.mjs",
+    "build:browser": "node scripts/build-browser.mjs"
   },
   "engines": {
     "node": ">=24"
   },
   "devDependencies": {
+    "electron-builder": "26.18.0",
+    "esbuild": "0.25.12",
+    "fflate": "0.8.2",
+    "libsodium-wrappers": "0.7.15",
     "resedit": "1.7.2"
+  },
+  "description": "A personal movie, series and episode viewing library",
+  "homepage": "https://github.com/ayca-kaygusuz/quiet-screen",
+  "author": "Quiet Screen contributors",
+  "build": {
+    "appId": "com.quietscreen.desktop",
+    "productName": "Quiet Screen",
+    "npmRebuild": false,
+    "asar": true,
+    "directories": {
+      "buildResources": "desktop/assets",
+      "output": "work/linux"
+    },
+    "files": [
+      "index.html",
+      "style.css",
+      "app.mjs",
+      "app-response.mjs",
+      "catalogue.mjs",
+      "imdb-episodes.mjs",
+      "episode-releases.mjs",
+      "franchises.mjs",
+      "franchise-lookup.mjs",
+      "library.mjs",
+      "releases.mjs",
+      "update-ui.mjs",
+      "sync/**",
+      "desktop/*.mjs",
+      "desktop/assets/**",
+      "desktop/google-client.generated.json",
+      "LICENSE",
+      "NOTICE",
+      "THIRD_PARTY_NOTICES.md",
+      "platform-manifest.json"
+    ],
+    "linux": {
+      "executableName": "quiet-screen",
+      "artifactName": "Quiet-Screen-${version}-linux-${arch}.${ext}",
+      "desktop": {
+        "entry": {
+          "Comment": "Your personal watch library",
+          "StartupWMClass": "quiet-screen",
+          "Name": "Quiet Screen"
+        }
+      },
+      "target": [
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "deb"
+        },
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "tar.gz"
+        }
+      ],
+      "category": "Video",
+      "maintainer": "Quiet Screen contributors <contributors@example.invalid>",
+      "icon": "desktop/assets/icon.png"
+    },
+    "deb": {
+      "compression": "xz"
+    }
   }
 }

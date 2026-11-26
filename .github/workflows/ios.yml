@@ -1,0 +1,97 @@
+name: iPhone and iPad application
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: quiet-screen-ios
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 55
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      QUIET_SCREEN_GOOGLE_IOS_CLIENT_ID: ${{ vars.QUIET_SCREEN_GOOGLE_IOS_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test
+      - name: Prepare public iOS Google configuration
+        env:
+          QUIET_SCREEN_GOOGLE_IOS_CONFIGURATION: ${{ secrets.QUIET_SCREEN_GOOGLE_IOS_CLIENT_SECRET }}
+        run: python3 scripts/ios-google-config.py
+      - name: Resolve pinned Google native SDK and retain its notices
+        run: |
+          set -euo pipefail
+          node scripts/build-ios.mjs resolve
+          python3 scripts/ios-notices.py
+          echo "QUIET_SCREEN_IOS_NOTICES=$GITHUB_WORKSPACE/work/ios/native-notices.txt" >> "$GITHUB_ENV"
+      - name: Test native iPad and iPhone runtimes
+        run: |
+          set -euo pipefail
+          python3 scripts/test-ios-simulators.py
+      - name: Build unsigned universal device IPA
+        run: npm run build:ios
+      - name: Verify universal IPA and retained licenses
+        run: python3 scripts/check-ios-package.py
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ios-unsigned-package
+          path: |
+            work/ios/*-unsigned.ipa
+            work/ios/INSTALL-iPhone-iPad.md
+            work/ios/ios-build.json
+            work/ios/native-notices.txt
+            ios/QuietScreen.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          retention-days: 1
+      - name: Export native Simulator screenshots
+        if: always()
+        run: |
+          shopt -s nullglob
+          for result in work/ios/*-runtime.xcresult; do
+            name=$(basename "$result" .xcresult)
+            xcrun xcresulttool export attachments --path "$result" --output-path "work/ios/previews/$name"
+          done
+      - name: Retain native runtime results
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ios-runtime-results
+          path: |
+            work/ios/*runtime.xcresult
+            work/ios/simulator-results.json
+            work/ios/previews/**
+            ios/QuietScreen.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          retention-days: 1
+  publish:
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: quiet-screen-release-assets
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-unsigned-package
+          path: platform-release
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-platform.mjs ios platform-release

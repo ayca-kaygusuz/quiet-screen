@@ -1,0 +1,88 @@
+name: Linux application
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID }}
+      QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libsecret-1-0 gnome-keyring dbus-x11 xvfb
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Prepare verified Linux build tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/quiet-screen-linux-tools"
+          mkdir -p "$tools/electron" "$tools/7zip" "$tools/fpm"
+          version=$(node -p "require('./package.json').devDependencies.electron")
+          archive="electron-v$version-linux-x64.zip"
+          gh release download "v$version" --repo electron/electron --pattern "$archive" --pattern SHASUMS256.txt --dir "$tools"
+          node --input-type=module - "$tools" "$archive" <<'JS'
+          import {readFileSync} from 'node:fs';import {join} from 'node:path';import {createHash} from 'node:crypto';
+          const [directory,name]=process.argv.slice(2),entries=readFileSync(join(directory,'SHASUMS256.txt'),'utf8').split(/\r?\n/).map(line=>line.trim().split(/\s+/)).filter(parts=>parts.at(-1)?.replace(/^\*/, '')===name);
+          if(entries.length!==1||createHash('sha256').update(readFileSync(join(directory,name))).digest('hex')!==entries[0][0])throw Error('Electron runtime checksum mismatch.');
+          JS
+          unzip -q "$tools/$archive" -d "$tools/electron"
+          gh release download '7zip@1.0.0' --repo electron-userland/electron-builder-binaries --pattern 7zip-linux-x64.tar.gz --dir "$tools"
+          echo 'd151bb44b2a9d9bfc52813ce4cac042916394a0ab8a56bd5d221a5dc9ef8d5d7  '"$tools/7zip-linux-x64.tar.gz" | sha256sum --check
+          tar -xzf "$tools/7zip-linux-x64.tar.gz" -C "$tools/7zip"
+          seven="$tools/7zip/7zip/bin/7za"
+          test -x "$seven"
+          gh release download 'fpm@2.1.4' --repo electron-userland/electron-builder-binaries --pattern fpm-1.17.0-ruby-3.4.3-linux-amd64.7z --dir "$tools"
+          echo '44b0ec6025c14ec137f56180e62675c0eae36233cdce53d0953d9c73ced8989f  '"$tools/fpm-1.17.0-ruby-3.4.3-linux-amd64.7z" | sha256sum --check
+          "$seven" x -y "$tools/fpm-1.17.0-ruby-3.4.3-linux-amd64.7z" "-o$tools/fpm" >/dev/null
+          echo "QUIET_SCREEN_ELECTRON_DIST=$tools/electron" >> "$GITHUB_ENV"
+          echo "ELECTRON_BUILDER_7ZIP_PATH=$seven" >> "$GITHUB_ENV"
+          echo "CUSTOM_FPM_PATH=$tools/fpm/fpm" >> "$GITHUB_ENV"
+      - run: npm run build:linux
+      - run: sudo apt-get install -y ./work/linux/Quiet-Screen-*-linux-amd64.deb
+      - name: Test native sandbox and real keyring
+        run: |
+          sudo chown root:root "$QUIET_SCREEN_ELECTRON_DIST/chrome-sandbox"
+          sudo chmod 4755 "$QUIET_SCREEN_ELECTRON_DIST/chrome-sandbox"
+          dbus-run-session -- bash -c 'echo "" | gnome-keyring-daemon --unlock --components=secrets; xvfb-run -a node scripts/check-linux-runtime.mjs'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quiet-screen-linux
+          retention-days: 1
+          path: |
+            work/linux/*.deb
+            work/linux/*.tar.gz
+            work/linux/SHA256SUMS-Linux.txt
+
+  publish:
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: quiet-screen-release-assets
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: quiet-screen-linux
+          path: platform-release
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-platform.mjs linux platform-release

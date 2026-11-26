@@ -35,7 +35,7 @@ export function createWebAccount(env={},options={}){
   const session=await open('session'),account=session?.account&&/^\d{1,100}$/.test(session.account.id)?session.account:null;
   if(action==='status'&&request.method==='GET'){
    const outcome=await open('outcome');if(outcome)cookie('outcome','',0);
-   return json({mode:'web',configured:true,account,network:{metered:null,source:'browser'},rememberSupported:true,...(outcome?{error:outcome.message}:{})});
+   return json({mode:'web',configured:true,account,network:{metered:null,source:'browser'},rememberSupported:true,...(options.browserMerge?{syncTransport:'browser-v1'}:{}),...(outcome?{error:outcome.message}:{})});
   }
   if(action==='start'&&request.method==='GET'){
    const requestOrigin=request.headers.get('Origin'),site=request.headers.get('Sec-Fetch-Site');if(requestOrigin&&requestOrigin!==origin||site&&!['same-origin','none'].includes(site))return json({error:'Start sign-in from Quiet Screen.'},403);
@@ -56,7 +56,47 @@ export function createWebAccount(env={},options={}){
   if(request.method!=='POST')return json({error:'Method not allowed'},405);
   if(request.headers.get('Origin')!==origin||request.headers.get('X-Quiet-Screen-Account')!=='1')return json({error:'Invalid account request'},403);
   if(action==='signout'){cookie('session','',0);cookie('login','',0);return json({mode:'web',configured:true,account:null})}
+  if(options.browserMerge&&action.startsWith('drive/')){
+   if(!account)return json({error:'Sign in to Google to sync.',code:'SIGN_IN_REQUIRED'},401);
+   if(request.headers.get('X-Quiet-Screen-Account-Id')!==account.id)return json({error:'This request belongs to a different account.'},403);
+   headers.set('X-Quiet-Screen-Account-Id',account.id);
+   try{
+    let token;
+    const authorize=async(force=false)=>{if(!token||force){const refreshed=await refreshGoogleToken({...configuration,refreshToken:session.refreshToken},fetcher);token=refreshed.access_token;if(refreshed.refresh_token){session.refreshToken=refreshed.refresh_token;cookie('session',await seal(session,'session'),180*86400)}}return token};
+    const drive=async(url,settings={})=>{
+     for(let attempt=0;attempt<2;attempt++){
+      const response=await fetcher(url,{...settings,headers:{...settings.headers,Authorization:'Bearer '+await authorize(attempt>0)},redirect:'error',signal:AbortSignal.timeout(45000)});
+      if(response.status===401&&attempt===0&&!settings.body)continue;
+      if(!response.ok){const error=Error('Google Drive could not finish this request. Your local library is kept.');error.code=response.status===401?'SIGN_IN_REQUIRED':'DRIVE_UNAVAILABLE';throw error}
+      return response;
+     }
+    };
+    const operation=action.slice(6);
+    if(operation==='list'){const files=await createDriveStore({accessToken:authorize,fetcher}).list();return json({files,account})}
+    const id=u.searchParams.get('id')||'';
+    if(['read','remove'].includes(operation)&&!/^[a-zA-Z0-9_-]{1,200}$/.test(id))return json({error:'Invalid Drive checkpoint.'},400);
+    if(operation==='read'){
+     const response=await drive('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media');
+     return new Response(boundedStream(response.body,WebAccountSync.MAX_BYTES),{headers:new Headers([...headers,['Content-Type','application/json']])});
+    }
+    if(operation==='remove'){
+     await drive('https://www.googleapis.com/drive/v3/files/'+id,{method:'DELETE'});return json({removed:true});
+    }
+    if(operation==='create'){
+     if(!request.body||Number(request.headers.get('Content-Length'))>WebAccountSync.MAX_BYTES)return json({error:'The Drive copy is too large.'},413);
+     const checkpoint=crypto.randomUUID(),boundary='quietScreen'+checkpoint.replaceAll('-','');
+     const metadata={name:'quiet-screen-sync-v1-'+checkpoint+'.json',parents:['appDataFolder'],appProperties:{quietScreen:'sync-v1',batch:checkpoint}};
+     const encoder=new TextEncoder(),prefix=encoder.encode('--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(metadata)+'\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'),suffix=encoder.encode('\r\n--'+boundary+'--');
+     const reader=boundedStream(request.body,WebAccountSync.MAX_BYTES).getReader();let started=false,finished=false;
+     const body=new ReadableStream({async pull(controller){if(!started){started=true;controller.enqueue(prefix);return}if(finished)return;try{const part=await reader.read();if(part.done){finished=true;controller.enqueue(suffix);controller.close();reader.releaseLock()}else controller.enqueue(part.value)}catch{controller.error(Error('The Drive copy could not be uploaded safely.'))}},async cancel(){await reader.cancel();reader.releaseLock()}});
+     const uploaded=await limitedJSON(await drive('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,version,size,appProperties',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+boundary},body}),1024*1024);
+     return json(uploaded);
+    }
+    return json({error:'Unknown Drive operation.'},404);
+   }catch(error){return json({error:'Drive could not finish this request. Your local library is kept.',code:error.code||'SYNC_ERROR'},error.code==='SIGN_IN_REQUIRED'?401:400)}
+  }
   if(action==='sync'){
+   if(options.browserMerge)return json({error:'Reload Quiet Screen to use this sync connection.'},409);
    if(!account)return json({error:'Sign in to Google to sync.',code:'SIGN_IN_REQUIRED'},401);
    try{
     const data=await limitedJSON(request,WebAccountSync.MAX_BYTES+2048);if(data.accountId!==account.id)return json({error:'This request belongs to a different account.'},403);
@@ -66,4 +106,9 @@ export function createWebAccount(env={},options={}){
   }
   return json({error:'Not found'},404);
  }};
+}
+
+function boundedStream(stream,limit){
+ if(!stream)throw Error('Missing checkpoint data.');let size=0;
+ return stream.pipeThrough(new TransformStream({transform(chunk,controller){size+=chunk.byteLength;if(size>limit)throw Error('The Drive copy is too large.');controller.enqueue(chunk)}}));
 }

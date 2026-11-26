@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "appId": "quiet-screen",
+  "displayName": "Quiet Screen",
+  "repository": "ayca-kaygusuz/quiet-screen",
+  "releaseChannel": "stable",
+  "backupVersion": 1,
+  "syncNamespace": "quietScreen",
+  "platforms": {
+    "windows-x64": {"packageId":"com.quietscreen.desktop","artifact":"Quiet-Screen-Setup-{version}-x64.exe","installMode":"per-user-installer"},
+    "linux-x64": {"packageId":"com.quietscreen.desktop","artifact":"Quiet-Screen-{version}-linux-amd64.deb","portableArtifact":"Quiet-Screen-{version}-linux-x64.tar.gz","installMode":"manual-package"},
+    "android": {"packageId":"com.quietscreen.android","artifact":"Quiet-Screen-Android-{version}.apk","installMode":"signed-apk"},
+    "ios": {"packageId":"com.quietscreen.ios","artifact":"Quiet-Screen-iOS-{version}-unsigned.ipa","installMode":"personal-signing","deviceFamilies":["iPhone","iPad"]},
+    "browser": {"artifact":"quiet-screen-pc.zip","installMode":"local-node-server"},
+    "web": {"installMode":"hosted-browser"}
+  }
+}

@@ -1,0 +1,50 @@
+name: Publish verified platform artifact
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        options: [windows, linux, android, ios]
+        required: true
+      runId:
+        description: Successful platform build run at this exact source commit
+        type: string
+        required: true
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: quiet-screen-release-assets
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify artifact provenance
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_RUN_ID: ${{ inputs.runId }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          node --input-type=module <<'JS'
+          import {appendFileSync} from 'node:fs';
+          const id=process.env.VERIFIED_RUN_ID,kind=process.env.PLATFORM;
+          if(!/^[0-9]+$/.test(id)||!['windows','linux','android','ios'].includes(kind))throw Error('Invalid platform run');
+          const run=await fetch('https://api.github.com/repos/'+process.env.GITHUB_REPOSITORY+'/actions/runs/'+id,{headers:{Authorization:'Bearer '+process.env.GH_TOKEN}}).then(r=>r.json());
+          if(run.head_sha!==process.env.GITHUB_SHA||run.path!=='.github/workflows/'+kind+'.yml'||run.conclusion!=='success')throw Error('A successful build at this exact source commit is required.');
+          appendFileSync(process.env.GITHUB_OUTPUT,'artifact='+({windows:'quiet-screen-windows-x64',linux:'quiet-screen-linux',android:'quiet-screen-android',ios:'ios-unsigned-package'}[kind])+'\n');
+          JS
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.provenance.outputs.artifact }}
+          path: platform-release
+          run-id: ${{ inputs.runId }}
+          github-token: ${{ github.token }}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-platform.mjs ${{ inputs.platform }} platform-release

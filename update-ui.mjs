@@ -38,7 +38,7 @@ function view() {
     installing: 'Installing update…', 'up-to-date': 'You’re up to date',
     unavailable: 'GitHub sign-in may be required', error: 'Update check failed',
   }[phase] ?? 'Updates'
-  const detail = {
+  let detail = {
     idle: 'Check GitHub for the latest release.',
     checking: 'Looking for a newer release.',
     available: desktop ? 'Download the verified installer when you’re ready.' : 'Open GitHub Releases for the latest version.',
@@ -59,8 +59,8 @@ function view() {
   $('update-status').textContent = heading + (version ? ' · v' + version : '') + '. ' + detail
   $('update-checked').textContent = lastChecked ? 'Last checked ' + new Date(lastChecked).toLocaleString() : ''
   $('check-updates').disabled = busy || offline || !enabled
-  const next = phase === 'available' ? (desktop ? 'download' : 'release') : phase === 'ready' ? 'install' : ''
-  const actionText = { download: 'Download update', install: 'Restart and update', release: 'Open release' }[next]
+  const next = phase === 'available' ? (state.platform === 'web' ? 'reload' : desktop ? 'download' : 'release') : phase === 'ready' ? 'install' : ''
+  const actionText = { download: 'Download update', install: state.installMode === 'manual' ? 'Show downloaded package' : 'Restart and update', release: 'Open release', reload: 'Reload app' }[next]
   for (const id of ['inline-update', 'card-update']) {
     const button = $(id)
     button.hidden = !next
@@ -122,7 +122,7 @@ async function browserCheck(manual) {
   pending = true
   apply({ phase: 'checking' })
   try {
-    const response = await fetch('/api/update-check', { cache: 'no-store' })
+    const response = await fetch('/api/update-check' + (globalThis.QuietScreenHostedBuild ? '?source=' + encodeURIComponent(globalThis.QuietScreenHostedBuild.source) : ''), { cache: 'no-store' })
     if (!response.ok) throw new Error()
     const result = await response.json()
     apply({ ...result, version: result.version ?? '', lastChecked: result.checkedAt })
@@ -136,6 +136,7 @@ async function browserCheck(manual) {
 }
 
 async function perform(action) {
+  if (action === 'reload') { location.reload(); return }
   if (action === 'release') {
     window.open(releases, '_blank', 'noopener,noreferrer')
     return

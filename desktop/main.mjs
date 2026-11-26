@@ -1,3 +1,4 @@
+import {createLinuxUpdates} from './linux-updates.mjs'
 import {createReleaseCatalog, releaseResponse} from '../episode-releases.mjs'
 import {franchiseResponse} from '../franchise-lookup.mjs'
 import { createImdbEpisodeCatalog, episodeResponse } from '../imdb-episodes.mjs'
@@ -31,7 +32,7 @@ function openExternalLink(value) {
 function createWindow() {
   window = new BrowserWindow({
     width: 1160, height: 850, minWidth: 420, minHeight: 500,
-    icon: fileURLToPath(new URL('./assets/icon.ico',import.meta.url)),
+    icon: fileURLToPath(new URL(process.platform==='linux'?'./assets/icon.png':'./assets/icon.ico',import.meta.url)),
     show: false, backgroundColor: '#17181d', autoHideMenuBar: true,
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   })
@@ -59,7 +60,7 @@ if (!app.requestSingleInstanceLock()) {
   })
   app.on('window-all-closed', () => app.quit())
   app.whenReady().then(() => {
-    app.setAppUserModelId('com.quietscreen.desktop')
+    if (process.platform === 'win32') app.setAppUserModelId('com.quietscreen.desktop')
     const releaseCatalog = createReleaseCatalog()
     const episodes = createImdbEpisodeCatalog({ directory: join(profile, 'imdb-cache') })
     const account = createGoogleAccount({
@@ -67,7 +68,7 @@ if (!app.requestSingleInstanceLock()) {
       defaultClientId: app.isPackaged ? '' : process.env.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID,
       defaultClientSecret: app.isPackaged ? '' : process.env.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_SECRET,
     })
-    const updates = createUpdateController({
+    const updates = process.platform === 'linux' ? createLinuxUpdates({app,shell,network:account.network}) : createUpdateController({
       app, dialog, getWindow: () => window, enabled: app.isPackaged && process.platform === 'win32' &&
         existsSync(join(dirname(process.execPath), 'quiet-screen.install')),
       network: account.network,

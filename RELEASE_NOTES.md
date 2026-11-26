@@ -1,11 +1,21 @@
-# Quiet Screen v0.7.1
+# Quiet Screen v0.8.0
 
-- Logging an episode from Watchlist starts Watching automatically. Its existing episode progress is adopted into the same viewing, so Start watching no longer sends next-episode suggestions back to episode 1.
-- Partial episode logs saved by older versions are reconciled on load. Known season boundaries are required before automatically declaring a viewing complete; unknown dates remain unknown.
-- Watching all known released episodes completes the current viewing once, without duplicating episode logs. Explicit Start rewatch begins a separate viewing. Future releases remain unwatched when they appear.
-- Movies can save a resume timestamp and notes while Watching. Use MM:SS or HH:MM:SS, or leave the timestamp blank and save notes alone. The position and notes survive backup, Drive sync and app restarts, and remain in viewing history after finishing.
-- Includes the v0.7.0 improvements: duplicate handling with Undo, IMDb posters and type filters, bulk-season logging, release tracking and named batch results, quieter menus, and the Google reconnect fix.
+Quiet Screen now has the same platform targets as the current Quiet Shelf:
+Windows x64, Linux x64, Android, universal iPhone/iPad, local browser and hosted
+browser. The interface, library and sync model remain shared.
 
-Validation: 71 automated model/API/sync tests and seven Windows UI suites, including automatic episode statuses, season ranges, movie resume and notes, duplicate Undo, release results, reconnect recovery, franchise management, all six themes and narrow layouts.
+- Linux packages include Debian and portable archives, secure keyring-aware Google
+  sign-in, profile retention and verified manual updates.
+- Android uses a signed native WebView shell, native Google authorization, system
+  file pickers and the shared library. Its signing identity is separate and stable.
+- iPhone/iPad uses a universal native WKWebView shell, native Google Sign-In and
+  full-window compact/regular layouts. The unsigned IPA needs personal signing
+  through AltStore Classic; it is not directly installable or an App Store release.
+- The hosted app uses a separate free Cloudflare Worker, encrypted remembered
+  sessions and browser-side Drive merging. Deployment preserves the server key.
+- The release includes a local browser ZIP and machine-readable package metadata
+  for future Quiet launcher integration. App libraries remain independent.
 
-Release dates are supplied by [TVmaze](https://www.tvmaze.com/api), matched by IMDb ID. Finished series are skipped by default in batch checks, with an option to include them. Dates can vary by region or be unknown. IMDb remains the title source.
+Native Google client registration, real-device consent and system file-picker
+checks are distinct from automated build, emulator and Simulator verification.
+See PLATFORMS.md for setup and exact distribution/installation behavior.
