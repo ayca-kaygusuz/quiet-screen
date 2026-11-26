@@ -6,7 +6,8 @@ app.setPath('appData',mkdtempSync(join(app.getPath('temp'),'quiet-screen-reconne
 const timer=setTimeout(()=>finish(Error('Reconnect UI check timed out')),30000)
 function finish(error){clearTimeout(timer);console.log(error?.stack??'PASS: same-account reconnect clears expired authorization, preserves library and resumes Drive sync.');app.exit(error?1:0)}
 app.once('browser-window-created',(_,window)=>window.webContents.once('did-finish-load',async()=>{
- const run=code=>window.webContents.executeJavaScript(code)
+ const run=async code=>{try{return await window.webContents.executeJavaScript(code)}catch(error){throw Error('Reconnect renderer failed while executing: '+code,{cause:error})}}
+ window.webContents.on('console-message',event=>{if(event.message?.includes('Error'))console.log(event.message)})
  const wait=async condition=>{for(let i=0;i<150;i++){if(await run(condition))return;await new Promise(r=>setTimeout(r,50))}throw Error('Condition failed: '+condition)}
  try {
   await wait('typeof QuietScreenAccount!=="undefined"')
@@ -24,7 +25,7 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
    };
    await QuietScreenAccount.refresh();
    await QuietScreenAccount.sync(true);
-  })()`)
+  })().catch(error=>{console.error(error.stack);throw error})`)
   assert.match(await run("document.querySelector('#syncBadge').textContent"),/Reconnect/)
   await run("document.querySelector('#googleSignIn').click()")
   await wait('pending')

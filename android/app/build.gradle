@@ -2,6 +2,16 @@ plugins { id 'com.android.application' }
 def appMetadata = new groovy.json.JsonSlurper().parse(file('../../package.json'))
 def parts = appMetadata.version.tokenize('.').collect { it.toInteger() }
 def publicClient = System.getenv('QUIET_SCREEN_GOOGLE_ANDROID_CLIENT_ID') ?: ''
+def releaseAlias = 'quiet-screen'
+if (System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_FILE')) {
+    def store = java.security.KeyStore.getInstance('PKCS12')
+    file(System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_FILE')).withInputStream { input -> store.load(input, System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_PASSWORD').toCharArray()) }
+    def keys = java.util.Collections.list(store.aliases()).findAll { store.isKeyEntry(it) }
+    if (!keys.contains(releaseAlias)) {
+        if (keys.size() != 1) throw new GradleException('Choose a keystore with one release signing key.')
+        releaseAlias = keys.first()
+    }
+}
 if (publicClient && !(publicClient ==~ /[0-9]+-[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com/)) throw new GradleException('Invalid public Android OAuth client ID.')
 android {
     namespace 'com.quietscreen.android'
@@ -22,7 +32,7 @@ android {
             release {
                 storeFile file(System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_FILE'))
                 storePassword System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_PASSWORD')
-                keyAlias 'quiet-screen'
+                keyAlias releaseAlias
                 keyPassword System.getenv('QUIET_SCREEN_ANDROID_KEYSTORE_PASSWORD')
             }
         }

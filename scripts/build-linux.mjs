@@ -7,7 +7,7 @@ if(process.platform!=='linux')throw Error('Build Linux packages on Linux or use 
 execFileSync(process.execPath,['scripts/configure-desktop.mjs'],{stdio:'inherit'})
 const require=createRequire(import.meta.url),{build,Platform,Arch}=require('electron-builder')
 const version=JSON.parse(readFileSync('package.json','utf8')).version,output=resolve('work/linux')
-await build({targets:Platform.LINUX.createTarget(['deb','tar.gz'],Arch.x64),publish:'never',config:{directories:{output},...(process.env.QUIET_SCREEN_ELECTRON_DIST?{electronDist:resolve(process.env.QUIET_SCREEN_ELECTRON_DIST)}:{})}})
+await build({targets:Platform.LINUX.createTarget(['deb','tar.gz'],Arch.x64),publish:'never',config:{electronVersion:'45.2.3',directories:{output},...(process.env.QUIET_SCREEN_ELECTRON_DIST?{electronDist:resolve(process.env.QUIET_SCREEN_ELECTRON_DIST)}:{})}})
 const files=[`Quiet-Screen-${version}-linux-amd64.deb`,`Quiet-Screen-${version}-linux-x64.tar.gz`]
 const sums=files.map(name=>createHash('sha256').update(readFileSync(join(output,name))).digest('hex')+'  '+name)
 writeFileSync(join(output,'SHA256SUMS-Linux.txt'),sums.join('\n')+'\n')
