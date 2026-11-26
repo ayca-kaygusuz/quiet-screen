@@ -18,7 +18,12 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
  try{
   await run(`
    window.confirm=()=>true;
-   window.clickText=(selector,text)=>[...document.querySelectorAll(selector+' button')].find(button=>button.textContent.startsWith(text)).click();
+   window.clickText=(selector,text)=>{
+     const button=[...document.querySelectorAll(selector+' button')].find(button=>button.textContent.startsWith(text));
+     const menu=button.closest('.bundle-menu');
+     if(menu&&!menu.open)menu.querySelector('summary').click();
+     button.click();
+   };
    window.franchiseCalls=[];
    const actualFetch=window.fetch;
    window.fetch=(url,options)=>{
@@ -40,6 +45,15 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
   assert.equal(await run("document.querySelectorAll('#titles .group-heading').length"),0)
   await run("document.querySelector('#franchise-results input[data-proposal]').click();document.querySelector('#apply-franchise-bundles').click();document.querySelector('#franchise-dialog').close()")
   assert.equal(await run("document.querySelectorAll('#titles .group-heading').length"),1)
+  await run("document.querySelector('#titles .bundle-menu summary').click()")
+  assert.equal(await run("document.querySelector('#titles .bundle-menu').open"),true)
+  assert.notEqual(await run("getComputedStyle(document.querySelector('#titles .bundle-menu-actions')).display"),'none')
+  await run("document.querySelector('#titles .bundle-menu summary').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))")
+  assert.equal(await run("document.querySelector('#titles .bundle-menu').open"),false)
+  assert.equal(await run("getComputedStyle(document.querySelector('#titles .bundle-menu-actions')).display"),'none')
+  assert.equal(await run("document.activeElement===document.querySelector('#titles .bundle-menu summary')"),true)
+  await run("document.querySelector('#titles .bundle-menu summary').click();document.querySelector('#library-heading').click()")
+  assert.equal(await run("document.querySelector('#titles .bundle-menu').open"),false)
   await run("document.querySelector('#franchise-lookup').click()")
   assert.equal(await run("document.querySelector('#run-franchise-lookup').disabled"),true)
   assert.match(await run("document.querySelector('#franchise-scope-summary').textContent"),/3 already checked/)

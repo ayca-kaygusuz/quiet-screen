@@ -181,15 +181,18 @@ function render() {
       toggle.id = groupId + '-toggle'
       toggle.setAttribute('aria-controls', groupId)
       toggle.setAttribute('aria-expanded', String(!collapsedGroups.has(group.key)))
-      groupHeader.append(toggle)
-      groupHeader.append(button('Manage bundle', () => openBundle(group)),
-        button(group.members.every(id => franchiseChecked(library.find(title => title.id === id))) ? 'Recheck connections' : 'Check connections',
-          () => openFranchiseLookup(group.members)))
-      if (group.members.length > 1) groupHeader.append(button('Start group rewatch', () => beginGroupRewatch(group)))
+      const visibleCount = visible.filter(title => group.members.includes(title.id)).length
+      const count = node('span', visibleCount === group.members.length
+        ? group.members.length + (group.members.length === 1 ? ' title' : ' titles')
+        : visibleCount + ' of ' + group.members.length, 'bundle-count')
+      groupHeader.append(toggle, count, bundleActions(group))
       groupList = node('ul')
+      groupList.className = 'bundle-items'
       groupList.id = groupId
       groupList.hidden = collapsedGroups.has(group.key)
-      rows.push(listItem(groupHeader, groupList))
+      const bundle = listItem(groupHeader, groupList)
+      bundle.className = 'bundle'
+      rows.push(bundle)
       grouped.set(group.key, groupList)
     }
     groupList.append(titleRow(title))
@@ -198,6 +201,47 @@ function render() {
     ? 'No matching titles.' : 'Your library is empty. Add a title to get started.')]))
   renderDetail(library.find(title => title.id === selected))
 }
+
+function bundleActions(group) {
+  const disclosure = node('details', '', 'bundle-menu')
+  const summary = node('summary', '⋯')
+  summary.setAttribute('aria-label', 'Actions for ' + group.name)
+  summary.title = 'Bundle actions'
+  const actions = node('div', '', 'bundle-menu-actions')
+  const action = (label, callback) => button(label, () => {
+    disclosure.open = false
+    callback()
+  })
+  actions.append(action('Manage bundle', () => openBundle(group)),
+    action(group.members.every(id => franchiseChecked(library.find(title => title.id === id)))
+      ? 'Recheck connections' : 'Check connections', () => openFranchiseLookup(group.members)))
+  if (group.members.length > 1) actions.append(action('Start group rewatch', () => beginGroupRewatch(group)))
+  disclosure.append(summary, actions)
+  disclosure.addEventListener('toggle', () => {
+    if (disclosure.open) {
+      const bounds = summary.getBoundingClientRect()
+      disclosure.toggleAttribute('data-open-above', bounds.bottom + actions.offsetHeight + 8 > innerHeight && bounds.top > actions.offsetHeight)
+      for (const menu of document.querySelectorAll('.bundle-menu[open]')) {
+        if (menu !== disclosure) menu.open = false
+      }
+    }
+  })
+  return disclosure
+}
+
+document.addEventListener('click', event => {
+  for (const menu of document.querySelectorAll('.bundle-menu[open]')) {
+    if (!menu.contains(event.target)) menu.open = false
+  }
+})
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return
+  const menu = document.querySelector('.bundle-menu[open]')
+  if (!menu) return
+  event.preventDefault()
+  menu.open = false
+  menu.querySelector('summary').focus()
+})
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' })
 const formatDate = value => dateFormat.format(new Date(value))
