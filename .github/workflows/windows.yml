@@ -57,6 +57,12 @@ jobs:
           $test = (Resolve-Path scripts/check-episode-ui.mjs).Path
           $process = Start-Process -FilePath $runtime -ArgumentList ('"' + $test + '"') -WindowStyle Hidden -Wait -PassThru
           exit $process.ExitCode
+      - name: Test installer close consent
+        run: |
+          $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron/electron.exe'
+          $compiler = @("${env:ProgramFiles(x86)}/NSIS/makensis.exe", "$env:ProgramFiles/NSIS/makensis.exe") |
+            Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          ./scripts/check-installer-close.ps1 -Electron $runtime -Compiler $compiler
       - name: Build installer
         run: |
           $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron'

@@ -5,6 +5,7 @@ Unicode true
 !include "FileFunc.nsh"
 
 Var RestartAfterUpdate
+Var RunningWindow
 
 
 Name "Quiet Screen"
@@ -55,6 +56,33 @@ Function CheckInstallDirectory
   allowed:
 FunctionEnd
 
+Function CloseRunningApplication
+  check_running:
+  FindWindow $RunningWindow "Chrome_WidgetWin_1" "Quiet Screen"
+  ${If} $RunningWindow == 0
+    Return
+  ${EndIf}
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Quiet Screen is running. Close it and continue installing? It will reopen when installation finishes. Save any unfinished entries before continuing." /SD IDNO IDYES close_application
+  Abort
+  close_application:
+  System::Call 'user32::GetWindowThreadProcessId(p $RunningWindow, *i .r0)'
+  System::Call 'kernel32::OpenProcess(i 0x100000, i 0, i r0) p.r1'
+  ${If} $1 == 0
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Quiet Screen could not be accessed. Close it yourself, then choose Retry." /SD IDCANCEL IDRETRY check_running
+    Abort
+  ${EndIf}
+  ; WM_CLOSE lets Electron finish its normal shutdown and flush saved data.
+  System::Call 'user32::PostMessageW(p $RunningWindow, i 0x0010, p 0, p 0)'
+  System::Call 'kernel32::WaitForSingleObject(p r1, i 30000) i.r2'
+  System::Call 'kernel32::CloseHandle(p r1)'
+  ${If} $2 != 0
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Quiet Screen is still closing. Close any open dialogs, then choose Retry." /SD IDCANCEL IDRETRY check_running
+    Abort
+  ${EndIf}
+  StrCpy $RestartAfterUpdate 1
+  Goto check_running
+FunctionEnd
+
 Function .onInit
   ${IfNot} ${RunningX64}
     MessageBox MB_OK|MB_ICONSTOP "This installer needs 64-bit Windows."
@@ -85,21 +113,20 @@ Function .onInit
       ${EndIf}
     ${EndIf}
   ${EndIf}
-  FindWindow $0 "Chrome_WidgetWin_1" "Quiet Screen"
-  ${If} $0 != 0
-    MessageBox MB_OK|MB_ICONINFORMATION "Close Quiet Screen, then run this installer again."
-    Abort
-  ${EndIf}
+
 FunctionEnd
 
 Function .onInstSuccess
   ${If} $RestartAfterUpdate == 1
+    IfSilent 0 done_restarting
     Exec '"$INSTDIR\Quiet Screen.exe"'
   ${EndIf}
+  done_restarting:
 FunctionEnd
 
 Section "Install"
   Call CheckInstallDirectory
+  Call CloseRunningApplication
   SetShellVarContext current
   SetOutPath "$INSTDIR"
   File /r "${APP_DIR}\*.*"
