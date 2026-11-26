@@ -8,8 +8,8 @@ function rounded(x,y,left,top,width,height,radius){let dx=Math.max(left+radius-x
 function stroke(x,y,left,top,width,height){return rounded(x,y,left,top,width,height,4)&&!rounded(x,y,left+6,top+6,width-12,height-12,1)}
 function pixel(x,y){
  if(!rounded(x,y,8,8,240,240,52))return [0,0,0,0];
- const inside=x>=92&&x<=178&&Math.abs(y-128)<=(x-92)*.6;
- const inner=x>=99&&x<=165&&Math.abs(y-128)<=(x-99)*.6-5;
+ const inside=x>=84&&x<=176&&Math.abs(y-128)<=(176-x)*.6;
+ const inner=x>=92&&x<=160&&Math.abs(y-128)<=(160-x)*.6;
  return inside&&!inner?[32,26,50,255]:[179,161,244,255];
 }function png(size){let rows=Buffer.alloc((size*4+1)*size);for(let y=0;y<size;y++)for(let x=0;x<size;x++){let sum=[0,0,0,0];for(let sy=0;sy<4;sy++)for(let sx=0;sx<4;sx++){let p=pixel((x+(sx+.5)/4)*256/size,(y+(sy+.5)/4)*256/size);for(let c=0;c<4;c++)sum[c]+=p[c]}let at=y*(size*4+1)+1+x*4;for(let c=0;c<4;c++)rows[at+c]=Math.round(sum[c]/16)}let ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(size,0);ihdr.writeUInt32BE(size,4);ihdr[8]=8;ihdr[9]=6;return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',deflateSync(rows)),chunk('IEND',Buffer.alloc(0))])}
 let sizes=[16,24,32,48,64,128,256],images=sizes.map(png),header=Buffer.alloc(6+16*sizes.length);header.writeUInt16LE(1,2);header.writeUInt16LE(sizes.length,4);let offset=header.length;for(let i=0;i<sizes.length;i++){let at=6+16*i;header[at]=header[at+1]=sizes[i]===256?0:sizes[i];header.writeUInt16LE(1,at+4);header.writeUInt16LE(32,at+6);header.writeUInt32LE(images[i].length,at+8);header.writeUInt32LE(offset,at+12);offset+=images[i].length}
