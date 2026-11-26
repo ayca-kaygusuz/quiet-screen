@@ -16,6 +16,8 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
   throw Error('Condition not reached: '+condition)
  }
  try{
+  await wait('typeof QuietScreenAccount!=="undefined"')
+  await run('QuietScreenAccount.refresh()')
   await run(`
    window.confirm=()=>true;
    window.clickText=(selector,text)=>{
@@ -35,7 +37,7 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
       links:imdb==='tt1266020'?[]:[{id:'Q113461786',relation:'P8345',label:'Breaking Bad'}]}))}));
    };
    const snapshot=QuietScreenApp.snapshot();
-   QuietScreenApp.apply({...snapshot,library:[['bb','Breaking Bad','tt0903747'],['saul','Better Call Saul','tt3032476'],['parks','Parks and Recreation','tt1266020']].map(([id,title,imdb])=>({id,title,imdb,format:'Movie',year:'',active:null,episodes:[],history:[],group:{mode:'auto',name:''}}))});
+   QuietScreenApp.apply({...snapshot,library:[['bb','Breaking Bad','tt0903747'],['saul','Better Call Saul','tt3032476'],['parks','Parks and Recreation','tt1266020']].map(([id,title,imdb])=>({id,title,imdb,poster:'',format:'Movie',year:'',active:null,episodes:[],history:[],group:{mode:'auto',name:''}}))});
   `)
   assert.equal(await run('franchiseCalls.length'),0)
   await run("document.querySelector('#franchise-lookup').click();document.querySelector('#run-franchise-lookup').click()")

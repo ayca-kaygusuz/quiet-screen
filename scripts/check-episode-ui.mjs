@@ -77,7 +77,7 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
       : String(url).startsWith('/api/episode-releases?') ? Promise.resolve(Response.json({imdb:'tt0944947',checkedAt:Date.now(),show:null,episodes:[]}))
       : originalFetch(url,options);
     const saved=QuietScreenApp.snapshot();
-    QuietScreenApp.apply({...saved,library:[{...saved.library[0],id:'legacy-imdb',imdb:'tt0944947',
+    QuietScreenApp.apply({...saved,library:[{...saved.library[0],id:'legacy-imdb',imdb:'tt0944947',poster:'',
       seasons:[],episodes:[],history:[{id:'legacy-finish',started:null,finished:null}]}]});
   `)
   for(let attempt=0;attempt<100&&!await run("QuietScreenApp.snapshot().library[0].seasons.length===2");attempt++){
