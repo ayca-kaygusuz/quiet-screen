@@ -24,13 +24,17 @@ test('old watched records are completed idempotently, including after backup rou
  assert.deepEqual(completeSeriesEpisodes(JSON.parse(JSON.stringify(migrated))),migrated)
  assert.deepEqual(old.episodes,[])
 })
-test('metadata supplied later completes existing viewings; expanded seasons add missing episodes',()=>{
+test('metadata supplied later completes existing viewings; later seasons remain unwatched',()=>{
  const old={...base,seasons:[],history:[history(null,null)]}
  assert.equal(completeSeriesEpisodes(old),old)
  const filled=completeSeriesEpisodes({...old,seasons:base.seasons})
  const expanded=completeSeriesEpisodes({...filled,seasons:[...base.seasons,{season:3,count:2}]})
- assert.equal(expanded.episodes.length,5)
- assert.equal(completeSeriesEpisodes(expanded).episodes.length,5)
+ assert.equal(expanded.episodes.length,3)
+ assert.equal(completeSeriesEpisodes(expanded).episodes.length,3)
+ assert.deepEqual(expanded.history[0].coverage,base.seasons)
+ const caughtUp=saveViewing(expanded,'past',{id:'caught-up',started:null,finished:null})
+ assert.equal(caughtUp.episodes.filter(v=>v.season===3).length,2)
+ assert.equal(caughtUp.history.length,2)
 })
 test('manual episode dates and duplicate viewings remain intact',()=>{
  const manual={id:'manual',season:1,episode:1,name:'Pilot',date:'2020-01-01',run:null}

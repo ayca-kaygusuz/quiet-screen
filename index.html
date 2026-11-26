@@ -52,11 +52,19 @@
         </section>
       </div>
     </details>
-    <div class="actions franchise-actions">
-      <button id="franchise-lookup" type="button">Look up franchise connections</button>
-      <button id="bundle-titles" type="button">Bundle titles…</button>
+    <div id="duplicate-feedback" class="feedback" role="status" hidden></div>
+    <div class="library-navigation">
+      <nav id="filters" aria-label="Filter by watch status"></nav>
+      <details class="bundle-menu library-menu">
+        <summary aria-label="Library actions">Library tools ⋯</summary>
+        <div class="bundle-menu-actions">
+          <button id="new-list" type="button">New list…</button>
+          <button id="check-series-releases" type="button">Check series for new releases…</button>
+          <button id="franchise-lookup" type="button">Look up franchise connections</button>
+          <button id="bundle-titles" type="button">Bundle titles…</button>
+        </div>
+      </details>
     </div>
-    <nav id="filters" aria-label="Filter by watch status"></nav>
     <nav id="list-tabs" aria-label="Custom lists"></nav>
     <section class="panel" id="list-context" aria-label="List details" hidden></section>
     <div class="layout">
@@ -64,6 +72,7 @@
         <div class="bar"><h2 id="library-heading">Titles</h2><span id="count"></span></div>
         <div class="library-tools">
           <label class="field">Search your library<input id="library-search" type="search" placeholder="Title, format, or group"></label>
+          <label class="field">Type<select id="library-type"><option value="">All types</option></select></label>
           <label class="field">Sort by<select id="library-sort">
             <option value="added">Date added · oldest first</option>
             <option value="newest">Date added · newest first</option>
@@ -119,6 +128,29 @@
     <progress id="update-progress" max="100" aria-label="Update progress" hidden></progress>
     <button id="card-update" type="button" class="primary" hidden></button>
   </section>
+  <dialog id="series-releases-dialog" aria-labelledby="series-releases-heading">
+    <h2 id="series-releases-heading">Check series for new releases</h2>
+    <p>Checks series in your library by IMDb ID. Movies and other standalone formats are excluded.</p>
+    <label class="episode-toggle"><input id="include-ended-series" type="checkbox"> Include finished series</label>
+    <p class="field-note">Finished status and release dates come from TVmaze. A series needs one check before its finished status is known.</p>
+    <p id="series-releases-summary" role="status"></p>
+    <div class="actions"><button id="run-series-releases" class="primary" type="button">Check series</button><button id="show-new-episodes" type="button">Show all new episodes</button></div>
+    <ul id="series-releases-results" aria-label="Release check results"></ul>
+    <div class="actions end"><button type="button" data-close>Close</button></div>
+  </dialog>
+  <dialog id="bulk-episodes-dialog" aria-labelledby="bulk-episodes-heading">
+    <form id="bulk-episodes-form">
+      <h2 id="bulk-episodes-heading">Log seasons</h2>
+      <p id="bulk-episodes-help">Mark missing episodes in this viewing. Existing episode logs stay intact.</p>
+      <div class="columns">
+        <label class="field">From season<select name="from" required></select></label>
+        <label class="field">Through season<select name="through" required></select></label>
+      </div>
+      <label class="field">Watched on <span>Leave blank if unknown</span><input name="date" type="date"></label>
+      <p id="bulk-episodes-summary" role="status"></p>
+      <div class="actions end"><button type="button" data-close>Cancel</button><button class="primary">Log seasons</button></div>
+    </form>
+  </dialog>
   <dialog id="title-dialog" aria-labelledby="title-heading">
     <form id="title-form">
       <h2 id="title-heading">Add title</h2>

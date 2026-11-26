@@ -2,13 +2,13 @@ import {validFranchiseCheck} from '../franchises.mjs';
 // Copyright 2026 Alex (Ayca Kaygusuz)
 // SPDX-License-Identifier: Apache-2.0
 
-import { validCompletion, validSeasons, validEpisode, validGroup, validLists } from '../library.mjs';
+import { validPoster, validReleaseInfo, validCompletion, validSeasons, validEpisode, validGroup, validLists } from '../library.mjs';
 
 /* Shared by the browser, Windows app and Drive adapter. No credentials belong here. */
 (function(root){
  'use strict';
  const SCHEMA=1,MAX_BYTES=10*1024*1024;
- const fields=new Set(["title","format","year","imdb","order","group","episodic","seasons","franchiseCheck"]);
+ const fields=new Set(["title","format","year","imdb","order","group","episodic","seasons","franchiseCheck","releases","poster"]);
  const clone=v=>JSON.parse(JSON.stringify(v)),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
  const key=parts=>JSON.stringify(parts),dotKey=h=>h.dot.join(':');
  function empty(){return {schema:SCHEMA,clock:{},registers:[]}}
@@ -29,6 +29,8 @@ import { validCompletion, validSeasons, validEpisode, validGroup, validLists } f
    (v.id===undefined||typeof v.id==='string'&&v.id.length<=100);
   if(p[2]==='episode')return v.id===p[3]&&validEpisode(v);
   if(p[3]==='franchiseCheck')return validFranchiseCheck(v);
+  if(p[3]==='poster')return validPoster(v);
+  if(p[3]==='releases')return validReleaseInfo(v);
   if(p[3]==='seasons')return validSeasons(v);
   if(p[3]==='group')return validGroup(v);
   if(p[3]==='episodic')return typeof v==='boolean';

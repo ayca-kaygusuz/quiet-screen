@@ -11,3 +11,8 @@ https://github.com/ayca-kaygusuz/quiet-shelf-public
 
 The Windows package includes Electron and Chromium. Their licenses are
 included in the installed application directory.
+
+Optional episode release information is provided by TVmaze under CC BY-SA 4.0.
+https://www.tvmaze.com/api
+https://creativecommons.org/licenses/by-sa/4.0/
+IMDb remains the title source. External catalogue data retains its own license.

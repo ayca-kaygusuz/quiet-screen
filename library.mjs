@@ -19,6 +19,12 @@ export function imdbId(value) {
   }
 }
 
+export function validPoster(value) {
+  if(value==='')return true
+  if(typeof value!=='string'||value.length>2048)return false
+  try {const u=new URL(value);return u.origin==='https://m.media-amazon.com'&&!u.username&&!u.password&&!u.hash&&u.pathname.startsWith('/images/')} catch{return false}
+}
+
 export function status(title) {
   if (title.active) return title.history.length ? 'Rewatching' : 'Watching'
   return title.history.length ? 'Watched' : 'Watchlist'
@@ -26,6 +32,34 @@ export function status(title) {
 
 export function start(title, date = today()) {
   return title.active ? title : { ...title, active: { started: date, id: crypto.randomUUID() } }
+}
+
+// Duplicate additions change viewing state, never replace metadata or history.
+export function duplicateAddition(title, requested, finished = null, rewatch = false) {
+  if (requested === status(title)) return { title }
+  if (requested === 'Watching') {
+    if (title.active) return { title }
+    if (title.history.length && !rewatch) return { title, offerRewatch: true }
+    return { title: start(title) }
+  }
+  if (requested === 'Watched' && (title.active || !title.history.length)) {
+    return { title: saveViewing(title, 'finish', {
+      id: crypto.randomUUID(), started: title.active?.started ?? null, finished,
+    }) }
+  }
+  // Returning to Watchlist would discard history or an active viewing.
+  return { title }
+}
+
+export function undoDuplicateAddition(before, saved, current) {
+  if(!current)return null
+  const historyCore=title=>JSON.stringify(title.history.map(({coverage,...view})=>view))
+  const explicitEpisodes=title=>JSON.stringify(title.episodes.filter(e=>!e.inferred))
+  if(JSON.stringify(current.active)!==JSON.stringify(saved.active)||historyCore(current)!==historyCore(saved)||explicitEpisodes(current)!==explicitEpisodes(saved))return null
+  const oldIds=new Set(before.history.map(view=>view.id))
+  const addedIds=new Set(saved.history.filter(view=>!oldIds.has(view.id)).map(view=>view.id))
+  return {...current,active:before.active,history:current.history.filter(view=>!addedIds.has(view.id)),
+    episodes:current.episodes.filter(episode=>!episode.inferred||!addedIds.has(episode.completion))}
 }
 
 export function saveViewing(title, mode, viewing, index) {
@@ -42,6 +76,36 @@ export function validDate(date) {
   return !Number.isNaN(+parsed) && parsed.toISOString().slice(0, 10) === date
 }
 
+export function validReleaseInfo(value) {
+  return !!value && /^tt\d{7,}$/.test(value.imdb) && Number.isFinite(value.checkedAt) && value.checkedAt>0 &&
+    (value.ended===undefined||typeof value.ended==='boolean') &&
+    (value.show===null || Number.isSafeInteger(value.show)&&value.show>0) && Array.isArray(value.episodes) && value.episodes.length<=10000 &&
+    value.episodes.every(e=>e&&typeof e==='object') && new Set(value.episodes.map(e=>e.season+':'+e.episode)).size===value.episodes.length &&
+    value.episodes.every(e=>Number.isInteger(e.season)&&e.season>0&&e.season<=9999&&Number.isInteger(e.episode)&&e.episode>0&&e.episode<=99999&&
+      typeof e.name==='string'&&e.name.length<=300&&validDate(e.airdate)&&
+      (e.airstamp===null||typeof e.airstamp==='string'&&e.airstamp.length<=40&&Number.isFinite(Date.parse(e.airstamp))))
+}
+
+export function releaseProgress(title, now=Date.now(), lifetime=false) {
+  const info=title.releases?.imdb===title.imdb?title.releases:null
+  if(!info?.show||!info.episodes.length)return null
+  const watched=new Set((lifetime?title.episodes:episodeProgress(title)).map(e=>e.season+':'+e.episode))
+  const released=[], upcoming=[], unknown=[]
+  for(const episode of info.episodes) {
+    if(watched.has(episode.season+':'+episode.episode))continue
+    if(episode.airstamp ? Date.parse(episode.airstamp)<=now : episode.airdate && episode.airdate<=todayAt(now))released.push(episode)
+    else if(episode.airstamp||episode.airdate)upcoming.push(episode)
+    else unknown.push(episode)
+  }
+  const order=(a,b)=>a.season-b.season||a.episode-b.episode
+  return {released:released.sort(order),upcoming:upcoming.sort((a,b)=>(a.airstamp??a.airdate).localeCompare(b.airstamp??b.airdate)),unknown:unknown.sort(order)}
+}
+
+function todayAt(now) {
+  const date=new Date(now)
+  return [date.getFullYear(),date.getMonth()+1,date.getDate()].map(n=>String(n).padStart(2,'0')).join('-')
+}
+
 export function validLibrary(titles) {
   if (!Array.isArray(titles)) return false
   const ids = new Set()
@@ -51,8 +115,10 @@ export function validLibrary(titles) {
     return ['title', 'format'].every(key => typeof title[key] === 'string' && title[key].trim()) &&
       typeof title.year === 'string' && /^(\d{4})?$/.test(title.year) &&
       typeof title.imdb === 'string' && /^(tt\d{7,})?$/.test(title.imdb) &&
+      (title.poster === undefined || validPoster(title.poster)) &&
       (title.group === undefined || validGroup(title.group)) &&
       (title.franchiseCheck === undefined || validFranchiseCheck(title.franchiseCheck)) &&
+      (title.releases === undefined || validReleaseInfo(title.releases)) &&
       (title.episodic === undefined || typeof title.episodic === 'boolean') &&
       (title.episodes === undefined || validEpisodes(title.episodes)) &&
       (title.seasons === undefined || validSeasons(title.seasons)) &&
@@ -65,6 +131,11 @@ export function validLibrary(titles) {
 
 export function isEpisodic(format) {
   return /\b(series|miniseries|show|serial|sitcom|anime|soap)\b/i.test(format)
+}
+
+export function seriesReleaseTargets(titles, includeEnded=false) {
+  return titles.filter(title=>title.imdb&&(isEpisodic(title.format)||title.episodic&&!/^(movie|tv movie|short|special|video|episode)$/i.test(title.format.trim()))&&
+    (includeEnded||title.releases?.imdb!==title.imdb||title.releases.ended!==true))
 }
 
 export function validGroup(group) {
@@ -185,6 +256,32 @@ export function clearEpisodeViewings(title, ids) {
   return {...title, episodes:title.episodes.filter(view => !selected.has(view.id))}
 }
 
+export function logSeasonRange(title, from, through, date=null) {
+  if(!Number.isInteger(from)||!Number.isInteger(through)||from<0||through<from||through>9999||!validDate(date))throw Error('Choose a valid season range and date.')
+  const counts=new Map(title.seasons.map(s=>[s.season,s.count]))
+  let total=0
+  for(let season=from;season<=through;season++) {
+    if(!counts.has(season))throw Error('Episode counts are missing for season '+season+'.')
+    total+=counts.get(season)
+  }
+  if(total>10000)throw Error('Choose fewer seasons (up to 10,000 episodes at once).')
+  const known=new Set(episodeProgress(title).map(e=>e.season+':'+e.episode))
+  const releases=title.releases?.imdb===title.imdb&&title.releases.show
+    ? new Map(title.releases.episodes.map(e=>[e.season+':'+e.episode,e])):null
+  const added=[]
+  let skipped=0
+  for(let season=from;season<=through;season++)for(let episode=1;episode<=counts.get(season);episode++) {
+    const key=season+':'+episode
+    if(known.has(key))continue
+    if(releases){
+      const release=releases.get(key)
+      if(release?.airdate&&(release.airdate>(date??today())||(!date||date===today())&&release.airstamp&&Date.parse(release.airstamp)>Date.now())){skipped++;continue}
+    }
+    added.push({id:crypto.randomUUID(),season,episode,name:releases?.get(key)?.name??'',date,run:title.active?.id??null})
+  }
+  return {title:{...title,episodes:[...title.episodes,...added]},added:added.length,skipped}
+}
+
 const titleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 export const librarySorts = ['added', 'newest', 'title', 'title-desc', 'year', 'watched', 'status']
 
@@ -234,6 +331,8 @@ export function validCompletion(view) {
 export function completeSeriesEpisodes(title) {
   if (!(title.episodic ?? isEpisodic(title.format)) || !title.seasons?.length || !title.history.length) return title
   const episodes = (title.episodes ?? []).map(view => ({...view}))
+  const releases = title.releases?.imdb===title.imdb && title.releases.show
+    ? new Map(title.releases.episodes.map(e=>[e.season+':'+e.episode,e])) : null
   const last = title.history.at(-1)
   const history = title.history.map(view => {
     const previous = new Map((view.coverage ?? []).map(item => [item.season,item.count]))
@@ -250,8 +349,13 @@ export function completeSeriesEpisodes(title) {
           ? view.started ?? view.finished : view.finished
       }
     }
-    for (const {season,count} of title.seasons) {
+    for (const {season,count} of view.coverage === undefined ? title.seasons : []) {
       for (let episode = (previous.get(season) ?? 0) + 1; episode <= count; episode++) {
+        if(releases) {
+          const release=releases.get(season+':'+episode)
+          const cutoff=view.finished??today()
+          if(!release?.airdate||release.airdate>cutoff||cutoff===today()&&release.airstamp&&Date.parse(release.airstamp)>Date.now())continue
+        }
         if (known.has(season + ':' + episode)) continue
         episodes.push({
           id: 'completed-' + view.id + '-s' + season + '-e' + episode,

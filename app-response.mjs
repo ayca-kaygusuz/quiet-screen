@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { imdbId } from './library.mjs'
+import { imdbId, validPoster } from './library.mjs'
 
 const assets = new Map([
   ['/', ['index.html', 'text/html']],
@@ -32,6 +32,7 @@ async function lookup(query, request) {
       .map(item => ({
         imdb: item.id, title: item.l, format: formats.get(item.qid) ?? 'Other',
         year: Number.isInteger(item.y) ? String(item.y) : '',
+        poster: validPoster(item.i?.imageUrl) ? item.i.imageUrl : '',
       })))
   } catch {
     return Response.json([], { status: 502 })
@@ -47,7 +48,7 @@ export async function serveApp(url, method, request = fetch) {
     const body = await readFile(new URL(asset[0], import.meta.url))
     return new Response(body, { headers: {
       'Content-Type': asset[1] + '; charset=utf-8',
-      'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src https://m.media-amazon.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
       'Referrer-Policy': 'no-referrer',
     } })
   } catch {

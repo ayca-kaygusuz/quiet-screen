@@ -1,3 +1,4 @@
+import {createReleaseCatalog, releaseResponse} from './episode-releases.mjs'
 import {franchiseResponse} from './franchise-lookup.mjs'
 import { createImdbEpisodeCatalog, episodeResponse } from './imdb-episodes.mjs'
 import { fileURLToPath } from 'node:url'
@@ -49,6 +50,7 @@ export function createAppServer(request = fetch, environment = process.env) {
   const account = createWebAccount(environment, { desktopConfiguration, sessionKey, fetcher: request })
 
   const episodes = createImdbEpisodeCatalog({ directory: fileURLToPath(new URL('imdb/', privateDir)), fetcher: request })
+  const releaseCatalog = createReleaseCatalog({fetcher: request})
   const updateCheck = createBrowserReleaseHandler({ fetcher: request })
 
   return createServer(async (req, res) => {
@@ -83,6 +85,8 @@ export function createAppServer(request = fetch, environment = process.env) {
         }
         response=await franchiseResponse(new Request(url,{method:req.method,headers:req.headers,
           ...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})}),{fetcher:request})
+      } else if (url.pathname === '/api/episode-releases' && req.method === 'GET') {
+        response = await releaseResponse(url, releaseCatalog)
       } else if (url.pathname === '/api/imdb-episodes' && req.method === 'GET') {
         response = await episodeResponse(url, episodes)
       } else if (url.pathname === '/api/update-check') {

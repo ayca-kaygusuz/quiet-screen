@@ -74,6 +74,7 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
     const originalFetch=window.fetch;
     window.fetch=(url,options)=>String(url).startsWith('/api/imdb-episodes?')
       ? Promise.resolve(Response.json({imdb:'tt0944947',seasons:[{season:1,count:10},{season:2,count:8}]}))
+      : String(url).startsWith('/api/episode-releases?') ? Promise.resolve(Response.json({imdb:'tt0944947',checkedAt:Date.now(),show:null,episodes:[]}))
       : originalFetch(url,options);
     const saved=QuietScreenApp.snapshot();
     QuietScreenApp.apply({...saved,library:[{...saved.library[0],id:'legacy-imdb',imdb:'tt0944947',
@@ -96,6 +97,19 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
   assert.equal(await run("document.querySelector('#titles .group-toggle').textContent"),'Steven Universe')
   assert.equal(await run("document.querySelectorAll('#titles .group-heading').length"),1)
   assert.match(await run("document.querySelector('#titles').textContent"),/Steven Universe Future/)
+  await run(`
+    window.clickText=(scope,text)=>[...document.querySelectorAll(scope+' button')].find(b=>b.textContent.startsWith(text)).click();
+    QuietScreenApp.apply({...QuietScreenApp.snapshot(),library:[{id:'elementary',title:'Elementary',format:'TV series',year:'2012',imdb:'',episodic:true,active:{id:'run',started:null},history:[],episodes:[],seasons:Array.from({length:7},(_,i)=>({season:i+1,count:2}))}]});
+    document.querySelector('#titles button').click();
+    clickText('#detail','Log seasons');
+    const bulk=document.querySelector('#bulk-episodes-form');
+    bulk.elements.from.value='1';bulk.elements.through.value='6';bulk.elements.date.value='';bulk.requestSubmit();
+  `)
+  assert.equal(await run('QuietScreenApp.snapshot().library[0].episodes.length'),12)
+  assert.equal(await run('QuietScreenApp.snapshot().library[0].episodes.every(e=>e.date===null&&e.run==="run")'),true)
+  assert.equal(await run('QuietScreenApp.snapshot().library[0].active.id'),'run')
+  await run("clickText('#detail','Episodes')")
+  assert.match(await run("document.querySelector('#detail').textContent"),/Mark next episode watched · S7 E1/)
   done()
  }catch(e){done(e)}
 }))

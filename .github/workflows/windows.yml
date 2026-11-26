@@ -63,6 +63,20 @@ jobs:
           $test = (Resolve-Path scripts/check-franchise-ui.mjs).Path
           $process = Start-Process -FilePath $runtime -ArgumentList ('"' + $test + '"') -WindowStyle Hidden -Wait -PassThru
           exit $process.ExitCode
+      - name: Test duplicate additions and type filters in Electron
+        run: |
+          $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron/electron.exe'
+          $test = (Resolve-Path scripts/check-duplicates-ui.mjs).Path
+          $process = Start-Process -FilePath $runtime -ArgumentList ('"' + $test + '"') -WindowStyle Hidden -Wait -PassThru
+          exit $process.ExitCode
+      - name: Test episode releases and Google reconnect in Electron
+        run: |
+          $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron/electron.exe'
+          foreach ($name in @('releases','reconnect','library')) {
+            $test = (Resolve-Path "scripts/check-$name-ui.mjs").Path
+            $process = Start-Process -FilePath $runtime -ArgumentList ('"' + $test + '"') -WindowStyle Hidden -Wait -PassThru
+            if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+          }
       - name: Test installer close consent
         run: |
           $runtime = Join-Path $env:RUNNER_TEMP 'quiet-screen-electron/electron.exe'

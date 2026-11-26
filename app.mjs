@@ -1,6 +1,6 @@
 import {franchiseChecked, franchiseTargets, franchiseSuggestions, setBundle, unbundle, validFranchiseCheck} from './franchises.mjs'
 import './sync/sync-core.js'
-import { completeSeriesEpisodes, clearEpisodeViewings, episodeProgress, validSeasons, librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
+import { undoDuplicateAddition, seriesReleaseTargets, validPoster, logSeasonRange, releaseProgress, validReleaseInfo, duplicateAddition, completeSeriesEpisodes, clearEpisodeViewings, episodeProgress, validSeasons, librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
 
 const $ = id => document.getElementById(id)
 const titleForm = $('title-form')
@@ -9,17 +9,24 @@ const fields = titleForm.elements
 const dates = viewForm.elements
 const storageKey = 'quiet-screen-v1'
 const episodeLookups = new Map()
+const releaseLookups = new Map()
+const posterLookups = new Set()
+const failedPosters = new Set()
+let posterQueue = Promise.resolve()
+let releaseAutoQueue = Promise.resolve()
+let titlePoster = {imdb:'',poster:''}
 let episodeLookupTimer
 const listsKey = 'quiet-screen-lists-v1'
 let lists = []
 let listSelection = null
 let detailTab = 'overview'
 const libraryViewKey = 'quiet-screen-library-view-v1'
-const libraryView = { sort: 'added', groups: true, standalone: true, plain: false }
+const libraryView = { sort: 'added', type: '', groups: true, standalone: true, plain: false }
 const collapsedGroups = new Set()
 try {
   const saved = JSON.parse(localStorage.getItem(libraryViewKey) ?? '{}')
   if (librarySorts.includes(saved.sort)) libraryView.sort = saved.sort
+  if (typeof saved.type === 'string' && saved.type.length <= 50) libraryView.type = saved.type
   for (const key of ['groups', 'standalone', 'plain']) {
     if (typeof saved[key] === 'boolean') libraryView[key] = saved[key]
   }
@@ -79,6 +86,42 @@ function node(tag, content = '', className = '') {
   return result
 }
 
+function posterImage(title) {
+  const placeholder = node('span', (title.title.trim()[0] ?? '▶').toUpperCase(), 'poster poster-placeholder')
+  placeholder.setAttribute('aria-hidden', 'true')
+  if (!title.poster || !validPoster(title.poster) || failedPosters.has(title.poster)) return placeholder
+  const image = node('img', '', 'poster')
+  image.src = title.poster
+  image.alt = ''
+  image.loading = 'lazy'
+  image.decoding = 'async'
+  image.referrerPolicy = 'no-referrer'
+  image.onerror = () => { failedPosters.add(title.poster); image.replaceWith(placeholder) }
+  return image
+}
+
+async function refreshImdbDetails(id) {
+  try {
+    const response = await fetch('/api/imdb?q=' + encodeURIComponent(id), {signal:AbortSignal.timeout(12000)})
+    if (!response.ok) throw Error()
+    const results = await response.json()
+    const match = Array.isArray(results) && results.find(item => item.imdb === id)
+    if (!match) throw Error()
+    const poster = validPoster(match.poster) ? match.poster : ''
+    failedPosters.delete(poster)
+    const next = library.map(title => title.imdb === id ? {...title,poster,
+      format: title.format === 'Other' && typeof match.format === 'string' ? match.format : title.format} : title)
+    if (next.some((title,index)=>title!==library[index])) commit(next, selected, 'IMDb image and type checked.')
+  } catch { notice('IMDb details could not be refreshed. Your saved title is unchanged.') }
+}
+
+function schedulePosterLookups() {
+  for (const title of library) if (title.imdb && title.poster === undefined && !posterLookups.has(title.imdb)) {
+    posterLookups.add(title.imdb)
+    posterQueue = posterQueue.then(() => refreshImdbDetails(title.imdb)).then(() => new Promise(resolve=>setTimeout(resolve,600)))
+  }
+}
+
 function button(label, action, className) {
   const result = node('button', label, className)
   result.type = 'button'
@@ -98,9 +141,11 @@ function metadata(title) {
 
 function render() {
   scheduleEpisodeLookups()
+  schedulePosterLookups()
   renderInsights()
-  const tabs = ['All titles', ...statuses].map(label => {
-    const count = label === 'All titles' ? library.length : library.filter(title => status(title) === label).length
+  const tabs = ['All titles', ...statuses, 'New episodes'].map(label => {
+    const count = label === 'All titles' ? library.length : library.filter(title => label === 'New episodes'
+      ? releaseProgress(title, Date.now(), true)?.released.length : status(title) === label).length
     const tab = button(label + ' · ' + count, () => {
       listSelection = null
       filter = label
@@ -111,11 +156,23 @@ function render() {
     return tab
   })
   $('filters').replaceChildren(...tabs)
+  const types = new Map(library.map(title => [title.format.trim().toLowerCase(), title.format.trim()]))
+  if (libraryView.type && !types.has(libraryView.type)) types.set(libraryView.type, libraryView.type)
+  const typeOptions = [node('option', 'All types'), ...[...types].sort((a,b) => a[1].localeCompare(b[1])).map(([value,label]) => {
+    const option = node('option', label)
+    option.value = value
+    return option
+  })]
+  typeOptions[0].value = ''
+  $('library-type').replaceChildren(...typeOptions)
+  $('library-type').value = libraryView.type
   const query = $('library-search').value.trim().toLowerCase()
   const groups = seriesGroups(library)
   const currentList = lists.find(list => list.id === listSelection)
   renderLists(currentList)
-  let visible = library.filter(title => (currentList ? currentList.members.includes(title.id) : filter === 'All titles' || status(title) === filter) &&
+  let visible = library.filter(title => (currentList ? currentList.members.includes(title.id) : filter === 'All titles' ||
+    (filter === 'New episodes' ? releaseProgress(title, Date.now(), true)?.released.length : status(title) === filter)) &&
+    (!libraryView.type || title.format.trim().toLowerCase() === libraryView.type) &&
     (title.title + ' ' + metadata(title) + ' ' + (groups.get(title.id)?.name ?? '')).toLowerCase().includes(query))
   if (!currentList && !libraryView.plain) {
     visible = visible.filter(title => groups.has(title.id) ? libraryView.groups : libraryView.standalone)
@@ -147,7 +204,11 @@ function render() {
     row.setAttribute('aria-current', String(title.id === selected))
     const label = node('span')
     label.append(node('strong', title.title), node('small', metadata(title)))
-    row.append(label, node('span', status(title), 'badge'))
+    const releases = releaseProgress(title, Date.now(), true)
+    const identity = node('span', '', 'title-identity')
+    identity.append(posterImage(title),label)
+    row.append(identity, node('span', releases?.released.length && title.history.length
+      ? status(title) + ' · ' + releases.released.length + ' unwatched released' : status(title), 'badge'))
     const item = listItem(row)
     if (!currentList && filter === 'Watchlist') {
       const tick = button('✓', () => update(saveViewing(title, 'past', {
@@ -203,19 +264,25 @@ function render() {
 }
 
 function bundleActions(group) {
+  return actionMenu('Actions for ' + group.name, [
+    ['Manage bundle', () => openBundle(group)],
+    [group.members.every(id => franchiseChecked(library.find(title => title.id === id)))
+      ? 'Recheck connections' : 'Check connections', () => openFranchiseLookup(group.members)],
+    ...(group.members.length > 1 ? [['Start group rewatch', () => beginGroupRewatch(group)]] : []),
+  ])
+}
+
+function actionMenu(label, entries) {
   const disclosure = node('details', '', 'bundle-menu')
   const summary = node('summary', '⋯')
-  summary.setAttribute('aria-label', 'Actions for ' + group.name)
-  summary.title = 'Bundle actions'
+  summary.setAttribute('aria-label', label)
+  summary.title = label
   const actions = node('div', '', 'bundle-menu-actions')
   const action = (label, callback) => button(label, () => {
     disclosure.open = false
     callback()
   })
-  actions.append(action('Manage bundle', () => openBundle(group)),
-    action(group.members.every(id => franchiseChecked(library.find(title => title.id === id)))
-      ? 'Recheck connections' : 'Check connections', () => openFranchiseLookup(group.members)))
-  if (group.members.length > 1) actions.append(action('Start group rewatch', () => beginGroupRewatch(group)))
+  actions.append(...entries.map(([label,callback]) => action(label,callback)))
   disclosure.append(summary, actions)
   disclosure.addEventListener('toggle', () => {
     if (disclosure.open) {
@@ -231,7 +298,7 @@ function bundleActions(group) {
 
 document.addEventListener('click', event => {
   for (const menu of document.querySelectorAll('.bundle-menu[open]')) {
-    if (!menu.contains(event.target)) menu.open = false
+    if (!menu.contains(event.target) || event.target.closest('button')) menu.open = false
   }
 })
 document.addEventListener('keydown', event => {
@@ -269,7 +336,21 @@ function renderDetail(title) {
     control.setAttribute('aria-pressed', String(tab.id === detailTab))
     navigation.append(control)
   }
-  detail.append(heading, node('p', metadata(title) + ' · ' + status(title)), navigation)
+  const headingRow = node('div', '', 'bar detail-heading')
+  const entries = [
+    ['Edit title', () => openTitle(title)],
+    ['Add to lists', () => openMemberships(title)],
+    [franchiseChecked(title) ? 'Recheck franchise' : 'Check franchise', () => openFranchiseLookup([title.id])],
+    ...(title.imdb ? [['Refresh IMDb details', () => void refreshImdbDetails(title.imdb)]] : []),
+    ...(title.active ? [['Cancel current viewing', () => {
+      if (confirm('Cancel the current viewing?')) update({...title,active:null}, 'Current viewing canceled.')
+    }]] : []),
+    ['Remove title', () => {
+      if (confirm('Remove this title and its viewing history?')) commit(library.filter(item=>item.id!==title.id),null,'Title removed.')
+    }],
+  ]
+  headingRow.append(heading,actionMenu('Title actions',entries))
+  detail.append(headingRow, node('p', metadata(title) + ' · ' + status(title)), navigation)
   if (detailTab === 'episodes') {
     renderEpisodes(detail, title)
     return
@@ -294,22 +375,21 @@ function renderDetail(title) {
     actions.append(button(title.history.length ? 'Start rewatch' : 'Start watching',
       () => update(start(title), 'Start date saved.'), 'primary'))
   }
-  actions.append(button('Log past viewing', () => openViewing(title, 'past')), button('Edit title', () => openTitle(title)), button('Add to lists', () => openMemberships(title)))
-  actions.append(button(franchiseChecked(title) ? 'Recheck franchise' : 'Check franchise', () => openFranchiseLookup([title.id])))
+  actions.append(button('Log past viewing', () => openViewing(title, 'past')))
   detail.append(actions)
-  if (title.episodic || title.episodes.length) detail.append(episodeControls(title))
+  if (title.episodic || title.episodes.length) {
+    const progress = releaseProgress(title)
+    const section = node('section', '', 'episode-overview')
+    section.append(node('h3', 'Episode progress'), node('p', progress
+      ? progress.released.length ? progress.released.length + ' released episodes left to watch' : 'Caught up with known release dates'
+      : new Set(episodeProgress(title).map(e=>e.season+':'+e.episode)).size + ' distinct episodes watched'))
+    const quickActions = node('div', '', 'actions')
+    quickActions.append(button('Open episodes', () => {detailTab='episodes';renderDetail(title)}),button('Log seasons…', () => openBulkEpisodes(title)))
+    section.append(quickActions)
+    detail.append(section)
+  }
   const summary = title.history.length + (title.history.length === 1 ? ' completed viewing' : ' completed viewings')
   detail.append(node('p', summary, 'viewing-summary'))
-  const secondary = node('div', '', 'actions end')
-  if (title.active) secondary.append(button('Cancel current viewing', () => {
-    if (confirm('Cancel the current viewing?')) update({ ...title, active: null }, 'Current viewing canceled.')
-  }))
-  secondary.append(button('Remove title', () => {
-    if (confirm('Remove this title and its viewing history?')) {
-      commit(library.filter(item => item.id !== title.id), null, 'Title removed.')
-    }
-  }))
-  detail.append(secondary)
 }
 
 function renderViewingHistory(detail, title) {
@@ -334,13 +414,14 @@ function existingBundleIdentity(name) {
 
 function openTitle(title) {
   editing = title
+  titlePoster = {imdb:title?.imdb ?? '',poster:title?.poster ?? ''}
   titleForm.reset()
   episodePreferenceChanged = false
   resetSearch()
   $('title-heading').textContent = title ? 'Edit title' : 'Add title'
   $('initial').hidden = Boolean(title)
   $('initial-date').hidden = true
-  for (const key of ['title', 'imdb']) fields[key].setCustomValidity('')
+  for (const key of ['title', 'imdb', 'finished']) fields[key].setCustomValidity('')
   if (title) for (const key of ['title', 'format', 'year', 'imdb']) fields[key].value = title[key]
   fields.groupMode.value = title?.group.mode ?? 'auto'
   fields.groupName.value = title?.group.name ?? ''
@@ -357,12 +438,50 @@ function openTitle(title) {
   $('title-dialog').showModal()
 }
 
-fields.status.onchange = () => { $('initial-date').hidden = fields.status.value !== 'Watched' }
+fields.status.onchange = () => {
+  $('initial-date').hidden = fields.status.value !== 'Watched'
+  fields.finished.setCustomValidity('')
+}
+fields.finished.oninput = () => fields.finished.setCustomValidity('')
 for (const key of ['title', 'imdb']) fields[key].oninput = () => fields[key].setCustomValidity('')
 
 function invalid(field, message) {
   field.setCustomValidity(message)
   field.reportValidity()
+}
+
+function handleDuplicate(existing, requested, finished, rewatch = false) {
+  const feedback = $('duplicate-feedback')
+  const message = text => { feedback.hidden=false;feedback.replaceChildren(node('span',text)) }
+  filter = 'All titles'
+  listSelection = null
+  libraryView.type = ''
+  $('library-search').value = ''
+  detailTab = 'overview'
+  const result = duplicateAddition(existing, requested, finished, rewatch)
+  if (result.title === existing) {
+    selected = existing.id
+    render()
+    message(existing.title + ' is already in your library · ' + status(existing) + '.')
+    if (result.offerRewatch) feedback.append(' ', button('Start rewatch', () => {
+      const current = library.find(title => title.id === existing.id)
+      if (current) handleDuplicate(current, 'Watching', null, true)
+      else message('This title is no longer in your library.')
+    }))
+    return true
+  }
+  if (!update(result.title, existing.title + ' was already in your library. Updated to ' + status(result.title) + '.')) return false
+  message(existing.title + ' was already in your library. Updated to ' + status(result.title) + '.')
+  const saved = library.find(title => title.id === existing.id)
+  feedback.append(' ', button('Undo', () => {
+    const current = library.find(title => title.id === existing.id)
+    const restored = undoDuplicateAddition(existing,saved,current)
+    if (!restored) {
+      return message('This title has changed since then. Open its history to review it.')
+    }
+    if(update(restored, 'Status change undone.')) message('Status change undone.')
+  }))
+  return true
 }
 
 titleForm.onsubmit = event => {
@@ -371,8 +490,14 @@ titleForm.onsubmit = event => {
   const imdb = imdbId(fields.imdb.value)
   if (!title) return invalid(fields.title, 'Enter a title.')
   if (fields.imdb.value.trim() && !imdb) return invalid(fields.imdb, 'Enter a valid IMDb title link or ID.')
-  if (imdb && library.some(item => item.imdb === imdb && item.id !== editing?.id)) {
-    return invalid(fields.imdb, 'This IMDb title is already in your library.')
+  const duplicate = imdb && library.find(item => item.imdb === imdb && item.id !== editing?.id)
+  if (duplicate) {
+    if (editing) return invalid(fields.imdb, 'This IMDb title is already in your library.')
+    if (fields.status.value === 'Watched' && fields.finished.value && duplicate.active?.started > fields.finished.value) {
+      return invalid(fields.finished, 'Choose a date on or after the existing start date.')
+    }
+    if (handleDuplicate(duplicate, fields.status.value, fields.finished.value || null)) $('title-dialog').close()
+    return
   }
   if (fields.groupMode.value === 'manual' && !fields.groupName.value.trim()) {
     return invalid(fields.groupName, 'Enter a group name.')
@@ -384,6 +509,8 @@ titleForm.onsubmit = event => {
     order: editing?.order ?? viewingId(),
     title, format: fields.format.value.trim() || 'Other', year: fields.year.value ? String(fields.year.valueAsNumber) : '', imdb,
     ...(editing?.franchiseCheck?.imdb === imdb ? {franchiseCheck:editing.franchiseCheck} : {}),
+    ...(editing?.releases?.imdb === imdb ? {releases:editing.releases} : {}),
+    ...(titlePoster.imdb === imdb && validPoster(titlePoster.poster) && titlePoster.poster ? {poster:titlePoster.poster} : {}),
     group: { mode: fields.groupMode.value, name: fields.groupMode.value === 'manual' ? fields.groupName.value.trim() : '',
       ...(fields.groupMode.value === 'manual' ? existingBundleIdentity(fields.groupName.value.trim()) : {}) },
     episodic: fields.episodic.checked,
@@ -444,6 +571,7 @@ function resetSearch() {
 }
 
 function selectImdb(match) {
+  titlePoster = {imdb:match.imdb,poster:match.poster ?? ''}
   for (const key of ['title', 'format', 'year', 'imdb']) fields[key].value = match[key]
   refreshEpisodeDefault()
   fields.title.setCustomValidity('')
@@ -464,7 +592,8 @@ async function searchImdb(query) {
     if (controller.signal.aborted) return
     $('lookup-status').textContent = matches.length ? 'Choose an IMDb match.' : 'No matches found.'
     results.replaceChildren(...matches.map((match, index) => {
-      const option = node('li', match.title + ' · ' + metadata(match), 'row')
+      const option = node('li', '', 'row suggestion')
+      option.append(posterImage(match),node('span', match.title + ' · ' + metadata(match)))
       option.id = 'imdb-option-' + index
       option.setAttribute('role', 'option')
       option.setAttribute('aria-selected', 'false')
@@ -698,7 +827,7 @@ function saveEpisode(title, values, existing) {
   }
   if (!validEpisode(view)) return false
   const season = title.seasons.find(item => item.season === view.season)
-  if (season && view.episode > season.count && (!existing || existing.season !== view.season || existing.episode !== view.episode)) {
+  if (season && view.episode > season.count && !title.releases?.episodes.some(e=>e.season===view.season&&e.episode===view.episode) && (!existing || existing.season !== view.season || existing.episode !== view.episode)) {
     invalid(episodeFields.episode, 'This season has ' + season.count + ' episodes. Update its count if needed.')
     return false
   }
@@ -719,26 +848,51 @@ episodeForm.onsubmit = event => {
 }
 
 function episodeControls(title) {
-  const next = nextEpisode(episodeProgress(title), title.seasons)
-  const controls = node('div', '', 'actions')
-  if (next) controls.append(button('Mark next episode watched · S' + next.season + ' E' + next.episode,
+  const releases = releaseProgress(title)
+  const next = releases ? releases.released[0] : nextEpisode(episodeProgress(title), title.seasons)
+  const controls = node('section', '', 'episode-controls')
+  const actions = node('div', '', 'actions')
+  if (next) actions.append(button('Mark next episode watched · S' + next.season + ' E' + next.episode,
     () => saveEpisode(title, {...next, date:today()}), 'primary'))
-  else controls.append(node('p', title.seasons.length
+  else controls.append(node('p', releases ? (releases.unknown.length ? 'No unwatched released episodes with a known date. Some release dates are unknown.' : 'Caught up with released episodes.') : title.seasons.length
     ? 'All known episodes watched.'
     : episodeLookups.get(title.imdb)?.phase === 'failed'
       ? 'IMDb episode information could not be loaded. Try again when online.'
       : episodeLookups.get(title.imdb)?.phase === 'empty'
         ? 'IMDb has no numbered episode information for this title yet.'
         : title.imdb ? 'Loading episodes from IMDb…' : 'Add an IMDb title link to load its episodes.'))
-  controls.append(button('Log episode…', () => openEpisode(title, next ?? {season:1,episode:1})),
-    button('Edit season counts…', () => openSeasons(title)))
+  actions.append(button('Log seasons…', () => openBulkEpisodes(title)))
+  const entries = [['Log episode…', () => openEpisode(title, next ?? {season:1,episode:1})],
+    ['Edit season counts…', () => openSeasons(title)]]
   if (title.imdb) {
-    const loading = episodeLookups.get(title.imdb)?.phase === 'loading'
-    const refresh = button(loading ? 'Loading IMDb episodes…' : 'Refresh IMDb episodes',
-      () => void fetchTitleEpisodes(title.imdb, true))
-    refresh.disabled = loading
-    controls.append(refresh)
+    const loading = episodeLookups.get(title.imdb)?.phase === 'loading' || releaseLookups.get(title.imdb)?.phase === 'loading'
+    entries.push([loading ? 'Checking episodes…' : 'Check for new episodes',
+      () => { if (!loading) void checkTitleEpisodes(title.imdb, true) }])
   }
+  actions.append(actionMenu('Episode actions', entries))
+  controls.append(actions)
+  if (releases?.upcoming.length) {
+    const next = releases.upcoming[0]
+    controls.append(node('p', 'Next announced: S' + next.season + ' E' + next.episode + ' · ' + formatDate(next.airdate ?? next.airstamp.slice(0,10))))
+  }
+  if (title.releases?.imdb === title.imdb) {
+    const info = title.releases
+    if (info.show) {
+      const source = node('a', 'TVmaze ↗')
+      source.href = 'https://www.tvmaze.com/shows/' + info.show
+      source.target = '_blank'
+      source.rel = 'noopener noreferrer'
+      const license = node('a', 'CC BY-SA 4.0')
+      license.href = 'https://creativecommons.org/licenses/by-sa/4.0/'
+      license.target = '_blank'
+      license.rel = 'noopener noreferrer'
+      const information = node('details', '', 'release-notes')
+      information.append(node('summary', 'Release information'),source,' · ',license,node('p', 'Checked ' + new Date(info.checkedAt).toLocaleDateString() + '. Dates may vary by region.'))
+      controls.append(information)
+    } else controls.append(node('small', 'No matching release schedule found. Showing IMDb episode listings.'))
+    if (info.show && !info.episodes.length) controls.append(node('small', 'No release dates listed yet. Showing IMDb episode listings.'))
+  }
+  if (releaseLookups.get(title.imdb)?.phase === 'failed') controls.append(node('small', 'Release-date check failed. Saved information is kept.'))
   return controls
 }
 
@@ -954,7 +1108,8 @@ function beginGroupRewatch(group) {
 }
 
 function renderLists(current) {
-  $('list-tabs').replaceChildren(button('+ New list', () => openList()), ...lists.map(list => {
+  $('list-tabs').hidden = !lists.length
+  $('list-tabs').replaceChildren(...lists.map(list => {
     const tab = button(list.name, () => {
       listSelection = list.id
       render()
@@ -978,6 +1133,126 @@ function renderLists(current) {
   } else if (!current.members.some(id => library.some(title => title.id === id))) {
     context.append(node('p', 'Open a title and use Add to lists to put it here.'))
   }
+}
+
+$('new-list').onclick = () => openList()
+
+let seriesCheckBusy = false
+let stopSeriesCheck = false
+function seriesCheckSummary() {
+  const all = seriesReleaseTargets(library,true)
+  const targets = seriesReleaseTargets(library,$('include-ended-series').checked)
+  $('series-releases-summary').textContent = targets.length + ' series to check' + (all.length-targets.length ? ' · ' + (all.length-targets.length) + ' finished series skipped' : '') + '.'
+}
+$('check-series-releases').onclick = () => {
+  if (!seriesCheckBusy) seriesCheckSummary()
+  $('series-releases-dialog').showModal()
+}
+$('include-ended-series').onchange = seriesCheckSummary
+$('series-releases-dialog').addEventListener('close',()=>{stopSeriesCheck=true})
+$('show-new-episodes').onclick = () => {
+  $('series-releases-dialog').close()
+  filter = 'New episodes'
+  listSelection = null
+  libraryView.type = ''
+  $('library-search').value = ''
+  render()
+}
+$('run-series-releases').onclick = async () => {
+  if (seriesCheckBusy) return
+  const includeEnded = $('include-ended-series').checked
+  const targets = seriesReleaseTargets(library,includeEnded).map(title=>({id:title.id,imdb:title.imdb}))
+  seriesCheckBusy = true
+  stopSeriesCheck = false
+  $('run-series-releases').disabled = $('include-ended-series').disabled = true
+  $('series-releases-results').replaceChildren()
+  let checked=0, failed=0, found=0, skipped=seriesReleaseTargets(library,true).length-targets.length
+  try {
+    for (const target of targets) {
+      if (stopSeriesCheck) break
+      const before = library.find(title=>title.id===target.id&&title.imdb===target.imdb)
+      if (!before) continue
+      $('series-releases-summary').textContent = 'Checking ' + (checked+1) + ' of ' + targets.length + ' · ' + before.title
+      const prior = new Set((releaseProgress(before,before.releases?.checkedAt??Date.now(),true)?.released??[]).map(e=>e.season+':'+e.episode))
+      const wasLoading = releaseLookups.get(target.imdb)?.phase === 'loading'
+      if (wasLoading) while (releaseLookups.get(target.imdb)?.phase === 'loading' && !stopSeriesCheck) await new Promise(resolve=>setTimeout(resolve,100))
+      if (stopSeriesCheck) break
+      const success = wasLoading ? releaseLookups.get(target.imdb)?.phase === 'loaded' : await checkTitleEpisodes(target.imdb,true,!includeEnded)
+      checked++
+      const current = library.find(title=>title.id===target.id&&title.imdb===target.imdb)
+      if (!current) continue
+      const progress = releaseProgress(current,Date.now(),true)
+      if (!success) {
+        failed++
+        $('series-releases-results').append(listItem(node('p',current.title + ' · Could not check. Saved information kept.')))
+        continue
+      }
+      if (!includeEnded && current.releases?.ended) {skipped++;continue}
+      if (!progress?.released.length) continue
+      found++
+      const fresh = progress.released.filter(e=>!prior.has(e.season+':'+e.episode)).length
+      const row = button('',()=>{
+        $('series-releases-dialog').close()
+        filter='All titles';listSelection=null;libraryView.type='';$('library-search').value=''
+        selected=current.id;detailTab='episodes';render();$('detail').querySelector('h2').focus()
+      },'row')
+      const label=node('span')
+      label.append(node('strong',current.title),node('small',progress.released.length + ' released episodes to watch' + (fresh ? ' · ' + fresh + ' newly found' : '')))
+      const names = progress.released.slice(0,8).map(e=>'S'+e.season+' E'+e.episode+(e.name?' · '+e.name:'')).join('; ')
+      label.append(node('small',names+(progress.released.length>8?'; and '+(progress.released.length-8)+' more':'')))
+      row.append(posterImage(current),label)
+      $('series-releases-results').append(listItem(row))
+    }
+    $('series-releases-summary').textContent = (stopSeriesCheck?'Stopped. ':'') + checked + ' checked · ' + found + ' series with released episodes to watch' + (skipped?' · '+skipped+' finished series skipped':'') + (failed?' · '+failed+' checks failed':'') + '.'
+  } finally {
+    seriesCheckBusy = false
+    $('run-series-releases').disabled = $('include-ended-series').disabled = false
+  }
+}
+
+const bulkEpisodesForm = $('bulk-episodes-form')
+let bulkTitleId
+function openBulkEpisodes(title) {
+  if (!title.seasons.length) {
+    notice('Load episode counts before logging seasons.')
+    detailTab = 'episodes'
+    renderDetail(title)
+    return
+  }
+  bulkTitleId = title.id
+  const seasons = [...title.seasons].sort((a,b)=>a.season-b.season)
+  for (const key of ['from','through']) {
+    bulkEpisodesForm.elements[key].replaceChildren(...seasons.map(({season,count})=>{
+      const option = node('option', 'Season ' + season + ' · ' + count + ' episodes')
+      option.value = String(season)
+      return option
+    }))
+  }
+  const next = nextEpisode(episodeProgress(title),title.seasons)
+  bulkEpisodesForm.elements.from.value = bulkEpisodesForm.elements.through.value = String(next?.season ?? seasons[0].season)
+  bulkEpisodesForm.elements.date.value = today()
+  bulkEpisodesForm.elements.from.setCustomValidity('')
+  updateBulkSummary()
+  $('bulk-episodes-dialog').showModal()
+}
+function updateBulkSummary() {
+  bulkEpisodesForm.elements.from.setCustomValidity('')
+  const title = library.find(t=>t.id===bulkTitleId)
+  if (!title) return
+  try {
+    const result = logSeasonRange(title,Number(bulkEpisodesForm.elements.from.value),Number(bulkEpisodesForm.elements.through.value),bulkEpisodesForm.elements.date.value||null)
+    $('bulk-episodes-summary').textContent = result.added + ' missing episodes will be logged' + (result.skipped ? ' · ' + result.skipped + ' future episodes excluded' : '') + '.'
+  } catch(error) { $('bulk-episodes-summary').textContent = error.message }
+}
+bulkEpisodesForm.onchange = updateBulkSummary
+bulkEpisodesForm.onsubmit = event => {
+  event.preventDefault()
+  const title = library.find(t=>t.id===bulkTitleId)
+  if (!title) return
+  try {
+    const result = logSeasonRange(title,Number(bulkEpisodesForm.elements.from.value),Number(bulkEpisodesForm.elements.through.value),bulkEpisodesForm.elements.date.value||null)
+    if (update(result.title,result.added + ' episode viewings logged.' + (result.skipped ? ' Future episodes were excluded.' : ''))) $('bulk-episodes-dialog').close()
+  } catch(error) { invalid(bulkEpisodesForm.elements.from,error.message) }
 }
 
 for (const dialog of document.querySelectorAll('dialog')) {
@@ -1007,10 +1282,61 @@ seasonsForm.onsubmit = event => {
 function scheduleEpisodeLookups() {
   clearTimeout(episodeLookupTimer)
   episodeLookupTimer = setTimeout(() => {
-    const ids = new Set(library.filter(title => title.episodic && title.imdb && !title.seasons.length)
+    const ids = new Set(library.filter(title => title.episodic && title.imdb &&
+      (!title.releases || title.releases.imdb !== title.imdb || (!title.releases.ended && Date.now() - title.releases.checkedAt > 86400000) || !title.seasons.length))
       .map(title => title.imdb))
-    for (const id of ids) if (!episodeLookups.has(id)) void fetchTitleEpisodes(id)
+    for (const id of ids) {
+      const attempt = releaseLookups.get(id)
+      if (!attempt || !['loading','queued'].includes(attempt.phase) && Date.now() - attempt.at > 86400000) {
+        releaseLookups.set(id,{phase:'queued',at:Date.now()})
+        releaseAutoQueue = releaseAutoQueue.then(() => {
+          const current = library.find(title=>title.imdb===id)
+          if (!current || current.releases?.imdb===id && Date.now()-current.releases.checkedAt<86400000) {
+            releaseLookups.set(id,{phase:'loaded',at:Date.now()})
+            return
+          }
+          return checkTitleEpisodes(id)
+        }).catch(()=>{})
+      }
+    }
   }, 50)
+}
+
+// Update availability as time passes, and refresh stored schedules once a day.
+setInterval(() => {
+  scheduleEpisodeLookups()
+  if (!document.querySelector('dialog[open]') && document.activeElement === document.body) render()
+}, 60000)
+window.addEventListener('focus', () => {
+  if (!document.querySelector('dialog[open]')) render()
+})
+
+async function checkTitleEpisodes(id, refresh = false, skipEnded = false) {
+  if (releaseLookups.get(id)?.phase === 'loading') return false
+  releaseLookups.set(id, {phase:'loading',at:Date.now()})
+  try {
+    const response = await fetch('/api/episode-releases?id=' + encodeURIComponent(id), {signal:AbortSignal.timeout(90000)})
+    if (!response.ok) throw Error()
+    const releases = await response.json()
+    if (!validReleaseInfo(releases) || releases.imdb !== id) throw Error()
+    const next = library.map(title => {
+      if (title.imdb !== id) return title
+      return {...title,releases,seasons:seasonsWithReleases({...title,releases},title.seasons)}
+    })
+    releaseLookups.set(id, {phase:'loaded',at:Date.now()})
+    if (next.some((title,index) => title !== library[index]) && !commit(next, selected, 'Episode releases checked.')) throw Error()
+    if (skipEnded && releases.ended) return true
+  } catch { releaseLookups.set(id, {phase:'failed',at:Date.now()}) }
+  await fetchTitleEpisodes(id, refresh)
+  return releaseLookups.get(id)?.phase === 'loaded'
+}
+
+function seasonsWithReleases(title, seasons) {
+  const counts = new Map(seasons.map(s => [s.season,s.count]))
+  if (title.releases?.imdb === title.imdb) for (const e of title.releases.episodes) {
+    counts.set(e.season,Math.max(counts.get(e.season) ?? 0,e.episode))
+  }
+  return [...counts].sort(([a],[b])=>a-b).map(([season,count])=>({season,count}))
 }
 
 async function fetchTitleEpisodes(id, refresh = false) {
@@ -1026,7 +1352,7 @@ async function fetchTitleEpisodes(id, refresh = false) {
     if (result.seasons.length) {
       // Read current records after the download, preserving edits made while waiting.
       const next = library.map(title => title.imdb === id && title.episodic &&
-        (refresh || !title.seasons.length) ? {...title,seasons:result.seasons} : title)
+        (refresh || !title.seasons.length) ? {...title,seasons:seasonsWithReleases(title,result.seasons)} : title)
       if (next.some((title,index) => title !== library[index])) {
         if (!commit(next, selected, 'Episode information loaded from IMDb.')) throw Error()
       } else render()
@@ -1246,6 +1572,11 @@ function rememberLibraryView() {
 }
 
 function initializeLibraryView() {
+  $('library-type').onchange = () => {
+    libraryView.type = $('library-type').value
+    rememberLibraryView()
+    render()
+  }
   const sort = $('library-sort')
   sort.value = libraryView.sort
   sort.onchange = () => {

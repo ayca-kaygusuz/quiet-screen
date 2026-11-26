@@ -1,3 +1,4 @@
+import {createReleaseCatalog, releaseResponse} from '../episode-releases.mjs'
 import {franchiseResponse} from '../franchise-lookup.mjs'
 import { createImdbEpisodeCatalog, episodeResponse } from '../imdb-episodes.mjs'
 import { fileURLToPath } from 'node:url'
@@ -22,7 +23,7 @@ let window
 
 function openExternalLink(value) {
   const url = new URL(value)
-  if (!url.username && !url.password && (url.origin === 'https://www.imdb.com' || url.href === 'https://www.apache.org/licenses/LICENSE-2.0' || url.href === RELEASES_URL || (url.origin === 'https://www.wikidata.org' && /^\/wiki\/Q\d+$/.test(url.pathname)))) {
+  if (!url.username && !url.password && (url.origin === 'https://www.imdb.com' || url.href === 'https://www.apache.org/licenses/LICENSE-2.0' || url.href === RELEASES_URL || url.href === 'https://creativecommons.org/licenses/by-sa/4.0/' || (url.origin === 'https://www.tvmaze.com' && /^\/shows\/\d+$/.test(url.pathname)) || (url.origin === 'https://www.wikidata.org' && /^\/wiki\/Q\d+$/.test(url.pathname)))) {
     void shell.openExternal(url.href).catch(console.error)
   }
 }
@@ -59,6 +60,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit())
   app.whenReady().then(() => {
     app.setAppUserModelId('com.quietscreen.desktop')
+    const releaseCatalog = createReleaseCatalog()
     const episodes = createImdbEpisodeCatalog({ directory: join(profile, 'imdb-cache') })
     const account = createGoogleAccount({
       profile, safeStorage, openExternal: url => shell.openExternal(url),
@@ -84,6 +86,7 @@ if (!app.requestSingleInstanceLock()) {
       const url = new URL(request.url)
       if (url.host !== 'app' || url.username || url.password) return new Response(null, { status: 403 })
       if (url.pathname === '/api/franchises') return franchiseResponse(request)
+      if (url.pathname === '/api/episode-releases' && request.method === 'GET') return releaseResponse(url, releaseCatalog)
       if (url.pathname === '/api/imdb-episodes' && request.method === 'GET') return episodeResponse(url, episodes)
       if (url.pathname.startsWith('/api/account/')) {
         const origin = request.headers.get('Origin')

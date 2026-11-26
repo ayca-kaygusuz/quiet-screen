@@ -11,7 +11,7 @@
  const realBooks=doc=>doc?.library||[],validated=doc=>App.validateDocument(doc);
  const publicAccount=value=>value&&typeof value.id==='string'&&/^\d{1,100}$/.test(value.id)&&typeof value.email==='string'?{id:value.id,email:value.email,name:typeof value.name==='string'?value.name:value.email}:null;
  let settings={auto:true,meteredOverride:null,...read(settingsStorage,{})};if(typeof settings.auto!=='boolean')settings.auto=true;if(typeof settings.meteredOverride!=='boolean')settings.meteredOverride=null;
- let account=null,linked=false,state=S.empty(),dirty=false,lastSync=null,firstPull=false,sourceAccountId=null,preview=null;
+ let account=null,linked=false,state=S.empty(),dirty=false,lastSync=null,firstPull=false,sourceAccountId=null,preview=null,authorizing=false;
  let connection={configured:false,mode:location.protocol==='quiet-screen:'?'desktop':'local',network:{}},applying=false,syncing=false,choosing=false,queued=false,authRequired=false,failed=false,workspaceReady=false,saveFailed=false,draftBlocked=false,notice='',epoch=0,syncTimer,authTimer,periodicTimer,indicatorTimer;
  const previous=read(activeStorage,null);
  sourceAccountId=previous?(previous.setupPending?previous.sourceAccountId||null:previous.id):null;
@@ -175,11 +175,15 @@
  async function refreshConnection(){
   try{const data=await request('status');connection=data;const next=publicAccount(data.account);
    if(workspaceReady&&next?.id!==account?.id&&App.hasDraft?.()){notice='Finish editing before opening the signed-in account.';renderAccount();clearTimeout(authTimer);authTimer=setTimeout(()=>void refreshConnection(),1200);return}
-   activate(next);if(data.error)notice=data.error;renderAccount();if(data.pending||data.busy){clearTimeout(authTimer);authTimer=setTimeout(()=>void refreshConnection(),1200)}else if(next&&!syncing&&(!linked||!firstPull||dirty))schedule(100);
+   activate(next);
+   const reconnected=authorizing&&next&&!data.pending&&!data.busy&&!data.error;
+   if(reconnected){authorizing=false;authRequired=false;failed=false;notice='Google reconnected. Your library is still here.'}
+   if(data.error){notice=data.error;if(!data.pending&&!data.busy)authorizing=false}
+   renderAccount();if(data.pending||data.busy){clearTimeout(authTimer);authTimer=setTimeout(()=>void refreshConnection(),1200)}else if(next&&!syncing&&(reconnected||!linked||!firstPull||dirty))schedule(100);
   }catch(e){notice=e.message;failed=true;const remembered=publicAccount(read(activeStorage,null));if(!account&&remembered){try{activate(remembered);notice='Waiting to reconnect. Your library is kept on this device.';authRequired=true}catch{}}renderAccount()}
  }
- $('#googleSignIn').onclick=async()=>{if(connection.mode==='web'){location.assign('/api/account/start');return}try{connection=await request('start',{});notice='';renderAccount();clearTimeout(authTimer);authTimer=setTimeout(()=>void refreshConnection(),1000)}catch(e){notice=e.message;renderAccount()}};
- $('#cancelGoogleSignIn').onclick=async()=>{try{connection=await request('cancel',{});notice='Sign-in cancelled.';renderAccount()}catch(e){notice=e.message;renderAccount()}};
+ $('#googleSignIn').onclick=async()=>{if(connection.mode==='web'){location.assign('/api/account/start');return}try{authorizing=true;connection=await request('start',{});notice='';renderAccount();clearTimeout(authTimer);authTimer=setTimeout(()=>void refreshConnection(),1000)}catch(e){authorizing=false;notice=e.message;renderAccount()}};
+ $('#cancelGoogleSignIn').onclick=async()=>{try{connection=await request('cancel',{});authorizing=false;notice='Sign-in cancelled.';renderAccount()}catch(e){notice=e.message;renderAccount()}};
  $('#googleSignOut').onclick=async()=>{if(syncing||choosing)return;try{persist();if(linked&&dirty&&!confirm('Some changes have not synced yet. They will stay on this device for this Google account. Sign out?'))return;connection=await request('signout',{});activate(null);notice='Signed out. Your separate local library is open.';renderAccount()}catch(e){notice=e.message;renderAccount()}};
  $('#syncNow').onclick=$('#checkSetupDrive').onclick=()=>sync(true);$('#startSyncLibrary').onclick=()=>chooseLibrary('combine');$('#useDriveLibrary').onclick=()=>chooseLibrary('drive');$('#setupLater').onclick=()=>accountPage(false);
  $('#syncIndicator').onclick=()=>{renderSyncIndicator();syncPopover($('#syncPopover').hidden)};$('#quickSync').onclick=()=>sync(true);$('#syncAccount').onclick=()=>accountPage();
