@@ -16,7 +16,7 @@
  const previous=read(activeStorage,null);
  sourceAccountId=previous?(previous.setupPending?previous.sourceAccountId||null:previous.id):null;
  let guest=read(guestStorage,null);if(!guest&&!previous){guest=App.snapshot();try{store(guestStorage,guest)}catch{}}
- function apply(document){applying=true;try{App.apply(document)}finally{applying=false}}
+ function apply(document){applying=true;try{App.apply(document)}finally{applying=false}queueMicrotask(recordChange)}
  // Older releases could show an empty account while the original local shelf
  // remained in the guest slot. Bring that shelf back before any network call.
  if(previous){

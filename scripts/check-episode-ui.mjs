@@ -7,7 +7,7 @@ app.setPath('appData',folder)
 const done=error=>{console.log(error?.stack??'PASS: season rollover, history selection, bulk clear, invalid counts, and reload persistence');app.exit(error?1:0)}
 setTimeout(()=>done(Error('Timed out')),25000).unref()
 app.once('browser-window-created',(_,window)=>window.webContents.once('did-finish-load',async()=>{
- const run=code=>window.webContents.executeJavaScript(code)
+ const run=async code=>{try{return await window.webContents.executeJavaScript(code)}catch(error){throw new Error('Renderer test failed while executing: '+code,{cause:error})}}
  try{
   await run(`
    window.clickText=(scope,text)=>[...document.querySelectorAll(scope+' button')].find(b=>b.textContent.startsWith(text)).click();
@@ -47,6 +47,28 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
   const loaded=new Promise(resolve=>window.webContents.once('did-finish-load',resolve))
   window.reload();await loaded
   assert.equal(await run("QuietScreenApp.snapshot().library[0].seasons.length"),2)
+  assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.length"),0)
+  await run(`
+    window.confirm=()=>true;
+    window.clickText=(scope,text)=>[...document.querySelectorAll(scope+' button')].find(b=>b.textContent.startsWith(text)).click();
+    document.querySelector('#titles button').click();
+    clickText('#detail','Viewing history');
+    clickText('#detail','Log past viewing');
+    const viewing=document.querySelector('#view-form');
+    viewing.elements.started.value='';
+    viewing.elements.finished.value='';
+    viewing.requestSubmit();
+  `)
+  assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.length"),3)
+  assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.every(view=>view.date===null)"),true)
+  await run(`
+    clickText('#detail','Episodes');
+    document.querySelector('#detail input[type=checkbox]').click();
+    clickText('#detail','Clear selected');
+  `)
+  assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.length"),0)
+  const migratedReload=new Promise(resolve=>window.webContents.once('did-finish-load',resolve))
+  window.reload();await migratedReload
   assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.length"),0)
   done()
  }catch(e){done(e)}

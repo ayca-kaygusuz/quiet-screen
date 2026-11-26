@@ -29,9 +29,9 @@ export function start(title, date = today()) {
 
 export function saveViewing(title, mode, viewing, index) {
   const history = [...title.history]
-  if (mode === 'edit') history[index] = viewing
-  else history.push(viewing)
-  return { ...title, history, active: mode === 'finish' ? null : title.active }
+  if (mode === 'edit') history[index] = { ...history[index], ...viewing }
+  else history.push({ ...viewing, ...(mode === 'finish' && title.active?.id ? { run: title.active.id } : {}) })
+  return completeSeriesEpisodes({ ...title, history, active: mode === 'finish' ? null : title.active })
 }
 
 export function validDate(date) {
@@ -56,8 +56,8 @@ export function validLibrary(titles) {
       (title.seasons === undefined || validSeasons(title.seasons)) &&
       (title.active === null || !!title.active && validDate(title.active.started) && (title.active.id === undefined || typeof title.active.id === 'string' && title.active.id.length <= 100)) &&
       Array.isArray(title.history) && new Set(title.history.map((view, index) => view?.id ?? 'legacy-' + String(index).padStart(8, '0'))).size === title.history.length && title.history.every(view =>
-        !!view && (view.id === undefined || typeof view.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(view.id)) && validDate(view.started) && validDate(view.finished) &&
-        (!view.started || !view.finished || view.started <= view.finished))
+        !!view && (view.id === undefined || typeof view.id === 'string' && /^[a-zA-Z0-9_-]{1,200}$/.test(view.id)) && validDate(view.started) && validDate(view.finished) &&
+        (!view.started || !view.finished || view.started <= view.finished) && validCompletion(view))
   })
 }
 
@@ -75,7 +75,9 @@ export function validEpisode(view) {
   return Boolean(view && typeof view.id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(view.id) &&
     Number.isInteger(view.season) && view.season >= 0 && view.season <= 9999 &&
     Number.isInteger(view.episode) && view.episode >= 1 && view.episode <= 99999 &&
-    typeof view.name === 'string' && view.name.length <= 300 && validDate(view.date) && (view.run === undefined || view.run === null || typeof view.run === 'string' && view.run.length <= 100))
+    typeof view.name === 'string' && view.name.length <= 300 && validDate(view.date) && (view.run === undefined || view.run === null || typeof view.run === 'string' && view.run.length <= 100) &&
+    (view.completion === undefined || typeof view.completion === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(view.completion)) &&
+    (view.inferred === undefined || typeof view.inferred === 'boolean'))
 }
 
 function validEpisodes(episodes) {
@@ -198,4 +200,45 @@ export function viewingInsights(titles, now = new Date()) {
     }
   }
   return { counts, months, undated }
+}
+
+export function validCompletion(view) {
+  return (view.run === undefined || typeof view.run === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(view.run)) &&
+    (view.coverage === undefined || validSeasons(view.coverage))
+}
+
+export function completeSeriesEpisodes(title) {
+  if (!(title.episodic ?? isEpisodic(title.format)) || !title.seasons?.length || !title.history.length) return title
+  const episodes = (title.episodes ?? []).map(view => ({...view}))
+  const last = title.history.at(-1)
+  const history = title.history.map(view => {
+    const previous = new Map((view.coverage ?? []).map(item => [item.season,item.count]))
+    const coverage = new Map(previous)
+    const known = new Set()
+    for (const episode of episodes) {
+      const belongs = episode.completion === view.id ||
+        !episode.completion && (view.run ? episode.run === view.run : view.id === last.id && !episode.run)
+      if (!belongs) continue
+      known.add(episode.season + ':' + episode.episode)
+      // Keep the user's own episode dates when reconciling a completed series.
+      if (episode.inferred && episode.completion === view.id) {
+        episode.date = episode.season === 1 && episode.episode === 1
+          ? view.started ?? view.finished : view.finished
+      }
+    }
+    for (const {season,count} of title.seasons) {
+      for (let episode = (previous.get(season) ?? 0) + 1; episode <= count; episode++) {
+        if (known.has(season + ':' + episode)) continue
+        episodes.push({
+          id: 'completed-' + view.id + '-s' + season + '-e' + episode,
+          season, episode, name: '',
+          date: season === 1 && episode === 1 ? view.started ?? view.finished : view.finished,
+          run: view.run ?? null, completion: view.id, inferred: true,
+        })
+      }
+      coverage.set(season,Math.max(count,previous.get(season) ?? 0))
+    }
+    return {...view,coverage:[...coverage].sort(([a],[b])=>a-b).map(([season,count])=>({season,count}))}
+  })
+  return {...title,episodes,history}
 }

@@ -1,7 +1,7 @@
 // Copyright 2026 Alex (Ayca Kaygusuz)
 // SPDX-License-Identifier: Apache-2.0
 
-import { validSeasons, validEpisode, validGroup, validLists } from '../library.mjs';
+import { validCompletion, validSeasons, validEpisode, validGroup, validLists } from '../library.mjs';
 
 /* Shared by the browser, Windows app and Drive adapter. No credentials belong here. */
 (function(root){
@@ -32,7 +32,7 @@ import { validSeasons, validEpisode, validGroup, validLists } from '../library.m
   if(p[3]==='episodic')return typeof v==='boolean';
   if(p[2]==='history')return plain(v)&&v.id===p[3]&&
    (v.started===null||calendarDate(v.started))&&(v.finished===null||calendarDate(v.finished))&&
-   (!v.started||!v.finished||v.started<=v.finished);
+   (!v.started||!v.finished||v.started<=v.finished)&&validCompletion(v);
   if(p[3]==='year')return typeof v==='string'&&/^(\d{4})?$/.test(v);
   if(p[3]==='imdb')return typeof v==='string'&&/^(tt\d{7,})?$/.test(v);
   return typeof v==='string'&&!!v.trim()&&v.length<=300;
@@ -67,7 +67,7 @@ import { validSeasons, validEpisode, validGroup, validLists } from '../library.m
    for(const view of title.episodes||[])out.set(key(['b',title.id,'episode',view.id]),view);
    for(const view of title.history){
     if(!view||typeof view.id!=='string'||!view.id)throw Error('Invalid viewing history.');
-    out.set(key(['b',title.id,'history',view.id]),{id:view.id,started:view.started,finished:view.finished});
+    out.set(key(['b',title.id,'history',view.id]),{id:view.id,started:view.started,finished:view.finished,...(view.run?{run:view.run}:{}),...(view.coverage?{coverage:view.coverage}:{})});
    }
   }
   if(!validLists(document.lists||[]))throw Error('Invalid lists.');

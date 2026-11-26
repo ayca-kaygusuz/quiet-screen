@@ -1,5 +1,5 @@
 import './sync/sync-core.js'
-import { clearEpisodeViewings, episodeProgress, validSeasons, librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
+import { completeSeriesEpisodes, clearEpisodeViewings, episodeProgress, validSeasons, librarySorts, sortTitles, viewingInsights, isEpisodic, nextEpisode, seriesGroups, validEpisode, validLists, imdbId, saveViewing, start, status, statuses, today, validLibrary } from './library.mjs'
 
 const $ = id => document.getElementById(id)
 const titleForm = $('title-form')
@@ -47,6 +47,7 @@ try {
 }
 
 function commit(next, selection, message) {
+  next = normalizeTitles(next)
   try {
     localStorage.setItem(storageKey, JSON.stringify(next))
   } catch {
@@ -527,7 +528,7 @@ function viewingId() {
 }
 
 function normalizeTitles(titles) {
-  return titles.map((title, index) => ({
+  return titles.map((title, index) => completeSeriesEpisodes({
     ...title,
     order: title.order ?? 'legacy-' + String(index).padStart(8, '0'),
     group: title.group ?? { mode: 'auto', name: '' },
@@ -631,6 +632,7 @@ function saveEpisode(title, values, existing) {
     name: values.name ?? '',
     date: values.date,
     run: existing ? existing.run ?? null : title.active?.id ?? null,
+    ...(existing?.completion ? {completion:existing.completion, inferred:false} : {}),
   }
   if (!validEpisode(view)) return false
   const season = title.seasons.find(item => item.season === view.season)
