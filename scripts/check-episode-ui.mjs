@@ -18,7 +18,7 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
    form.elements.episodic.checked=true;
    form.requestSubmit();
    clickText('#detail','Episodes');
-   clickText('#detail','Season episode counts');
+   clickText('#detail','Edit season counts');
    document.querySelector('#seasons-form').elements.seasons.value='1, 2\\n2, 1';
    document.querySelector('#seasons-form').requestSubmit();
    clickText('#detail','Mark next episode');
@@ -38,7 +38,7 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
   assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.length"),0)
   assert.match(await run("document.querySelector('#detail').textContent"),/S1 E1/)
   await run(`
-   clickText('#detail','Season episode counts');
+   clickText('#detail','Edit season counts');
    document.querySelector('#seasons-form').elements.seasons.value='1, 0';
    document.querySelector('#seasons-form').requestSubmit();
   `)
@@ -70,6 +70,21 @@ app.once('browser-window-created',(_,window)=>window.webContents.once('did-finis
   const migratedReload=new Promise(resolve=>window.webContents.once('did-finish-load',resolve))
   window.reload();await migratedReload
   assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.length"),0)
+  await run(`
+    const originalFetch=window.fetch;
+    window.fetch=(url,options)=>String(url).startsWith('/api/imdb-episodes?')
+      ? Promise.resolve(Response.json({imdb:'tt0944947',seasons:[{season:1,count:10},{season:2,count:8}]}))
+      : originalFetch(url,options);
+    const saved=QuietScreenApp.snapshot();
+    QuietScreenApp.apply({...saved,library:[{...saved.library[0],id:'legacy-imdb',imdb:'tt0944947',
+      seasons:[],episodes:[],history:[{id:'legacy-finish',started:null,finished:null}]}]});
+  `)
+  for(let attempt=0;attempt<100&&!await run("QuietScreenApp.snapshot().library[0].seasons.length===2");attempt++){
+    await new Promise(resolve=>setTimeout(resolve,50))
+  }
+  assert.equal(await run("QuietScreenApp.snapshot().library[0].seasons[0].count"),10)
+  assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.length"),18)
+  assert.equal(await run("QuietScreenApp.snapshot().library[0].episodes.every(view=>view.date===null)"),true)
   done()
  }catch(e){done(e)}
 }))

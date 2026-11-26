@@ -7,6 +7,8 @@ const viewForm = $('view-form')
 const fields = titleForm.elements
 const dates = viewForm.elements
 const storageKey = 'quiet-screen-v1'
+const episodeLookups = new Map()
+let episodeLookupTimer
 const listsKey = 'quiet-screen-lists-v1'
 let lists = []
 let listSelection = null
@@ -94,6 +96,7 @@ function metadata(title) {
 }
 
 function render() {
+  scheduleEpisodeLookups()
   renderInsights()
   const tabs = ['All titles', ...statuses].map(label => {
     const count = label === 'All titles' ? library.length : library.filter(title => status(title) === label).length
@@ -318,6 +321,7 @@ titleForm.onsubmit = event => {
   if (fields.groupMode.value === 'manual' && !fields.groupName.value.trim()) {
     return invalid(fields.groupName, 'Enter a group name.')
   }
+  if (editing) editing = library.find(title => title.id === editing.id) ?? editing
   const initial = fields.status.value
   const record = {
     id: editing?.id ?? crypto.randomUUID(),
@@ -662,10 +666,21 @@ function episodeControls(title) {
   if (next) controls.append(button('Mark next episode watched · S' + next.season + ' E' + next.episode,
     () => saveEpisode(title, {...next, date:today()}), 'primary'))
   else controls.append(node('p', title.seasons.length
-    ? 'All configured episodes watched. Add another season when available.'
-    : 'Set season episode counts to enable next-episode suggestions.'))
+    ? 'All known episodes watched.'
+    : episodeLookups.get(title.imdb)?.phase === 'failed'
+      ? 'IMDb episode information could not be loaded. Try again when online.'
+      : episodeLookups.get(title.imdb)?.phase === 'empty'
+        ? 'IMDb has no numbered episode information for this title yet.'
+        : title.imdb ? 'Loading episodes from IMDb…' : 'Add an IMDb title link to load its episodes.'))
   controls.append(button('Log episode…', () => openEpisode(title, next ?? {season:1,episode:1})),
-    button('Season episode counts…', () => openSeasons(title)))
+    button('Edit season counts…', () => openSeasons(title)))
+  if (title.imdb) {
+    const loading = episodeLookups.get(title.imdb)?.phase === 'loading'
+    const refresh = button(loading ? 'Loading IMDb episodes…' : 'Refresh IMDb episodes',
+      () => void fetchTitleEpisodes(title.imdb, true))
+    refresh.disabled = loading
+    controls.append(refresh)
+  }
   return controls
 }
 
@@ -929,6 +944,39 @@ seasonsForm.onsubmit = event => {
   if (!validSeasons(seasons)) return invalid(input, 'Use one unique season per line, such as 1, 10.')
   const title = library.find(item => item.id === seasonsForm.dataset.title)
   if (title && update({...title,seasons},'Season counts saved.')) $('seasons-dialog').close()
+}
+
+function scheduleEpisodeLookups() {
+  clearTimeout(episodeLookupTimer)
+  episodeLookupTimer = setTimeout(() => {
+    const ids = new Set(library.filter(title => title.episodic && title.imdb && !title.seasons.length)
+      .map(title => title.imdb))
+    for (const id of ids) if (!episodeLookups.has(id)) void fetchTitleEpisodes(id)
+  }, 50)
+}
+
+async function fetchTitleEpisodes(id, refresh = false) {
+  if (episodeLookups.get(id)?.phase === 'loading') return
+  episodeLookups.set(id, {phase:'loading'})
+  if (selected) renderDetail(library.find(title => title.id === selected))
+  try {
+    const response = await fetch('/api/imdb-episodes?id=' + encodeURIComponent(id))
+    if (!response.ok) throw Error()
+    const result = await response.json()
+    if (result.imdb !== id || !validSeasons(result.seasons)) throw Error()
+    episodeLookups.set(id, {phase:result.seasons.length ? 'loaded' : 'empty'})
+    if (result.seasons.length) {
+      // Read current records after the download, preserving edits made while waiting.
+      const next = library.map(title => title.imdb === id && title.episodic &&
+        (refresh || !title.seasons.length) ? {...title,seasons:result.seasons} : title)
+      if (next.some((title,index) => title !== library[index])) {
+        if (!commit(next, selected, 'Episode information loaded from IMDb.')) throw Error()
+      } else render()
+    } else render()
+  } catch {
+    episodeLookups.set(id, {phase:'failed'})
+    if (selected) renderDetail(library.find(title => title.id === selected))
+  }
 }
 
 globalThis.QuietScreenApp = syncApp

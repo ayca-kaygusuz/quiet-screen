@@ -1,3 +1,5 @@
+import { createImdbEpisodeCatalog, episodeResponse } from './imdb-episodes.mjs'
+import { fileURLToPath } from 'node:url'
 import { createBrowserReleaseHandler } from './releases.mjs'
 import { createServer } from 'node:http'
 import { randomBytes } from 'node:crypto'
@@ -45,6 +47,7 @@ export function createAppServer(request = fetch, environment = process.env) {
     (!publicOrigin && (desktopConfiguration || environment.QUIET_SCREEN_GOOGLE_WEB_CLIENT_SECRET) ? localSessionKey() : undefined)
   const account = createWebAccount(environment, { desktopConfiguration, sessionKey, fetcher: request })
 
+  const episodes = createImdbEpisodeCatalog({ directory: fileURLToPath(new URL('imdb/', privateDir)), fetcher: request })
   const updateCheck = createBrowserReleaseHandler({ fetcher: request })
 
   return createServer(async (req, res) => {
@@ -69,6 +72,8 @@ export function createAppServer(request = fetch, environment = process.env) {
           method: req.method, headers: req.headers,
           ...(req.method === 'POST' ? { body: Buffer.concat(chunks) } : {}),
         }))
+      } else if (url.pathname === '/api/imdb-episodes' && req.method === 'GET') {
+        response = await episodeResponse(url, episodes)
       } else if (url.pathname === '/api/update-check') {
         response = await updateCheck(new Request(url, { method: req.method, headers: req.headers }))
       } else {

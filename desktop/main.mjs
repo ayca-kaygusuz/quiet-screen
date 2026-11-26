@@ -1,3 +1,4 @@
+import { createImdbEpisodeCatalog, episodeResponse } from '../imdb-episodes.mjs'
 import { fileURLToPath } from 'node:url'
 import { createUpdateController, RELEASES_URL } from './updates.mjs'
 import { createGoogleAccount } from './google-account.mjs'
@@ -57,6 +58,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit())
   app.whenReady().then(() => {
     app.setAppUserModelId('com.quietscreen.desktop')
+    const episodes = createImdbEpisodeCatalog({ directory: join(profile, 'imdb-cache') })
     const account = createGoogleAccount({
       profile, safeStorage, openExternal: url => shell.openExternal(url),
       defaultClientId: app.isPackaged ? '' : process.env.QUIET_SCREEN_GOOGLE_DESKTOP_CLIENT_ID,
@@ -80,6 +82,7 @@ if (!app.requestSingleInstanceLock()) {
     protocol.handle(scheme, async request => {
       const url = new URL(request.url)
       if (url.host !== 'app' || url.username || url.password) return new Response(null, { status: 403 })
+      if (url.pathname === '/api/imdb-episodes' && request.method === 'GET') return episodeResponse(url, episodes)
       if (url.pathname.startsWith('/api/account/')) {
         const origin = request.headers.get('Origin')
         if ((origin && origin !== appURL.slice(0, -1) && origin !== 'null') ||
