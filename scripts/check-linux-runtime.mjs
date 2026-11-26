@@ -10,10 +10,12 @@ async function command(method,params={}){const id=++next;return new Promise((res
 const evaluate=async expression=>{const result=await command('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(result.exceptionDetails)throw Error(JSON.stringify(result.exceptionDetails));return result.result.value}
 async function start(){
  const server=createServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));const port=server.address().port;await new Promise(r=>server.close(r))
- child=spawn(exe,['--password-store=gnome-libsecret','--remote-debugging-port='+port],{env,stdio:'ignore'})
+ let startupLog=''
+ child=spawn(exe,['--disable-gpu','--password-store=gnome-libsecret','--remote-debugging-port='+port],{env,stdio:['ignore','pipe','pipe']})
+ child.stdout.on('data',data=>{startupLog+=data});child.stderr.on('data',data=>{startupLog+=data})
  let page
  for(let i=0;i<150;i++){try{page=(await fetch('http://127.0.0.1:'+port+'/json/list').then(r=>r.json())).find(p=>p.type==='page');if(page)break}catch{}await new Promise(r=>setTimeout(r,100))}
- if(!page)throw Error('The installed Linux app did not start with its sandbox enabled.')
+ if(!page)throw Error('The installed Linux app did not start with its sandbox enabled. Exit: '+child.exitCode+'\n'+startupLog)
  socket=new WebSocket(page.webSocketDebuggerUrl);await new Promise((r,j)=>{socket.addEventListener('open',r,{once:true});socket.addEventListener('error',j,{once:true})})
  socket.addEventListener('message',event=>{const data=JSON.parse(event.data),p=pending.get(data.id);if(p){clearTimeout(p.timer);pending.delete(data.id);data.error?p.reject(Error(data.error.message)):p.resolve(data.result)}})
  for(let i=0;i<150;i++){if(await evaluate('!!globalThis.QuietScreenApp&&!!globalThis.QuietScreenAccount'))return;await new Promise(r=>setTimeout(r,100))}
